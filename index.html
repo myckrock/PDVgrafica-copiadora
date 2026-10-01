@@ -1502,28 +1502,17 @@ function handleRegister(event) {
     const fullname = document.getElementById('reg-fullname').value.trim();
     const username = document.getElementById('reg-username').value.trim();
     const password = document.getElementById('reg-password').value;
-    const roleEl = document.querySelector('input[name="reg-role"]:checked');
-    const role = roleEl ? roleEl.value : 'ADMIN';
+    const role = document.querySelector('input[name="reg-role"]:checked').value;
 
-    // Pega a lista de usuários salvos no localStorage do domínio atual
     let users = JSON.parse(localStorage.getItem('pdv_users')) || [];
-    
-    // Pega o usuário logado atualmente (se houver)
-    const currentUser = JSON.parse(localStorage.getItem('pdv_current_user'));
 
-    // Verifica se JÁ EXISTE algum Administrador cadastrado no localStorage atual
-    const hasAdminRegistered = users.some(u => u.role === 'ADMIN');
-    const isAdminLoggedIn = currentUser && currentUser.role === 'ADMIN';
-
-    // REGRA DE SEGURANÇA AJUSTADA:
-    // Permite criar se NÃO existir nenhum Admin ainda no sistema (Primeira Configuração no GitHub Pages)
-    // OU se já houver um Administrador logado.
-    if (hasAdminRegistered && !isAdminLoggedIn) {
-        alert('Somente o Administrador logado pode criar novos usuários.');
+    // Se a lista de usuários estiver vazia no localStorage, permite cadastrar o Admin
+    const hasAdmin = users.some(u => u.role === 'ADMIN');
+    if (role === 'ADMIN' && hasAdmin) {
+        alert('Erro: Já existe um Administrador cadastrado no sistema. Faça login para gerenciar usuários.');
         return;
     }
 
-    // Verifica duplicação de login
     if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
         alert('Erro: Este nome de usuário já está em uso.');
         return;
@@ -1540,33 +1529,8 @@ function handleRegister(event) {
     users.push(newUser);
     localStorage.setItem('pdv_users', JSON.stringify(users));
 
-    alert(`Usuário ${username} cadastrado com sucesso! Agora você pode fazer o login.`);
-    
-    if (typeof showLoginScreen === 'function') {
-        showLoginScreen();
-    }
-}
-
-// Calculator Toggles
-function toggleCalc(type) {
-    document.getElementById('calc-print-box').classList.add('hidden');
-    document.getElementById('calc-banner-box').classList.add('hidden');
-    document.getElementById('calc-finish-box').classList.add('hidden');
-
-    document.getElementById('btn-calc-print').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
-    document.getElementById('btn-calc-banner').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
-    document.getElementById('btn-calc-finish').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
-
-    if (type === 'print') {
-        document.getElementById('calc-print-box').classList.remove('hidden');
-        document.getElementById('btn-calc-print').className = 'px-3 py-1 rounded-lg bg-indigo-600 text-white transition';
-    } else if (type === 'banner') {
-        document.getElementById('calc-banner-box').classList.remove('hidden');
-        document.getElementById('btn-calc-banner').className = 'px-3 py-1 rounded-lg bg-emerald-600 text-white transition';
-    } else if (type === 'finish') {
-        document.getElementById('calc-finish-box').classList.remove('hidden');
-        document.getElementById('btn-calc-finish').className = 'px-3 py-1 rounded-lg bg-purple-600 text-white transition';
-    }
+    alert(`Usuário ${username} cadastrado com sucesso! Faça login para continuar.`);
+    showLoginScreen();
 }
 
 function calculatePrintCost() {
