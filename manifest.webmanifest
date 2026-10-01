@@ -1,0 +1,27 @@
+{
+  "name": "PDV Gráfica & Copiadora Pro",
+  "short_name": "PDV Gráfica Pro",
+  "description": "Sistema de gestão, caixa, gráfica, papelaria e conveniência.",
+  "lang": "pt-BR",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f1f5f9",
+  "theme_color": "#312e81",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
