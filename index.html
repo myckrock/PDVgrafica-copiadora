@@ -387,6 +387,15 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="calc-custom-box" class="mt-4 p-4 rounded-xl border border-sky-200 bg-sky-50 space-y-3">
+                                <h4 class="text-sm font-bold text-sky-950">Calculadora de produtos personalizados</h4>
+                                <p class="text-[11px] text-slate-600">Selecione um produto marcado pelo administrador como calculável e informe a quantidade.</p>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Produto / Serviço</label><select id="calc-custom-product" onchange="calculateCustomCost()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"></select></div>
+                                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Quantidade</label><input id="calc-custom-qty" type="number" min="0.01" step="0.01" value="1" oninput="calculateCustomCost()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white"></div>
+                                </div>
+                                <div class="flex justify-between items-center"><span id="calc-custom-unit" class="text-xs text-slate-600">Preço unitário: R$ 0,00</span><div class="flex items-center gap-3"><strong id="calc-custom-total" class="text-lg text-sky-950">R$ 0,00</strong><button onclick="addCalculatedCustomToCart()" class="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold">Adicionar</button></div></div>
+                            </div>
                         </div>
                     </div>
 
@@ -560,6 +569,12 @@
                     <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
                         <h2 class="font-bold text-slate-800 text-sm">Histórico Geral de Vendas Realizadas</h2>
                         <span class="text-xs text-slate-500">Registros no sistema</span>
+                    </div>
+                    <div class="m-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/50">
+                        <h4 class="text-sm font-extrabold text-slate-800 mb-1">Preços das calculadoras</h4>
+                        <p class="text-[11px] text-slate-500 mb-3">Altere os valores utilizados nos cálculos de impressão, banner e acabamento. As alterações ficam salvas neste navegador.</p>
+                        <div id="calc-prices-admin" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+                        <div class="flex justify-end mt-3"><button type="button" onclick="saveCalcPricesFromAdmin()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold">Salvar preços</button></div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-xs text-slate-600">
@@ -1045,6 +1060,7 @@
                         <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Preço Unitário Base (R$)</label>
                         <input type="number" id="prod-price" step="0.01" min="0" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
                     </div>
+                    <label class="flex items-center gap-2 p-2 rounded-lg bg-sky-50 border border-sky-100 text-xs"><input id="prod-calc-enabled" type="checkbox" class="rounded text-indigo-600"><span><b>Disponível na calculadora personalizada</b><br><span class="text-slate-500">Permite calcular pelo preço unitário × quantidade.</span></span></label>
                     <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition">
                         Salvar Produto
                     </button>
@@ -1131,6 +1147,10 @@
         { id: 'p9', name: 'Panfletos 10x14cm (1000 un)', category: 'PAPELARIA', price: 180.00, icon: 'fa-paper-plane' },
         { id: 'p10', name: 'Caneca Personalizada Porcelana', category: 'PAPELARIA', price: 35.00, icon: 'fa-mug-hot' }
     ];
+
+    // Preços configuráveis pelo administrador (mantidos neste navegador).
+    const DEFAULT_CALC_PRICES = { printBase:0.50, a3:0.80, photo:1.20, couche:0.60, color:1.00, colorHigh:2.00, duplex:15, ilhose:10, bastao:15, finishSmall:8, finishLarge:15, plastA4:6, plastA3:12, refile:5 };
+    let calcPrices = { ...DEFAULT_CALC_PRICES, ...(JSON.parse(localStorage.getItem('pdv_calc_prices') || 'null') || {}) };
 
     // Produtos iniciais de Papelaria & Conveniência.
     // Se o catálogo já existir no navegador, estes itens são adicionados apenas quando ainda não houver
@@ -1368,6 +1388,8 @@
         calculatePrintCost();
         calculateBannerCost();
         calculateFinishCost();
+        renderCustomCalculator();
+        renderCalcPricesAdmin();
     };
 
     function saveState() {
@@ -1404,6 +1426,7 @@
 
             switchTab('pos');
             renderCatalog();
+            renderCustomCalculator();
             renderCart();
             renderSalesHistory();
             renderAdminCatalog();
@@ -1524,16 +1547,16 @@
         let totalImpressions = pages * copies;
         document.getElementById('calc-total-impressions').innerText = totalImpressions;
 
-        let basePrice = 0.50; // A4 PB
+        let basePrice = Number(calcPrices.printBase); // A4 PB
 
-        if (paper.startsWith('A3')) basePrice += 0.80;
-        if (paper.includes('FOTO')) basePrice += 1.20;
-        if (paper.includes('COUCHE')) basePrice += 0.60;
+        if (paper.startsWith('A3')) basePrice += Number(calcPrices.a3);
+        if (paper.includes('FOTO')) basePrice += Number(calcPrices.photo);
+        if (paper.includes('COUCHE')) basePrice += Number(calcPrices.couche);
 
-        if (color === 'COLOR') basePrice += 1.00;
-        if (color === 'COLOR_HIGH') basePrice += 2.00;
+        if (color === 'COLOR') basePrice += Number(calcPrices.color);
+        if (color === 'COLOR_HIGH') basePrice += Number(calcPrices.colorHigh);
 
-        if (isDuplex) basePrice *= 0.85; // 15% discount for duplex
+        if (isDuplex) basePrice *= (1 - Number(calcPrices.duplex) / 100);
 
         const total = totalImpressions * basePrice;
         document.getElementById('calc-unit-price').innerText = basePrice.toFixed(2);
@@ -1551,8 +1574,8 @@
         document.getElementById('calc-banner-area').innerText = area.toFixed(2) + ' m²';
 
         let total = area * matPrice;
-        if (hasIlhose) total += 10;
-        if (hasBastao) total += 15;
+        if (hasIlhose) total += Number(calcPrices.ilhose);
+        if (hasBastao) total += Number(calcPrices.bastao);
 
         document.getElementById('calc-banner-total').innerText = formatBRL(total);
     }
@@ -1561,13 +1584,13 @@
         const type = document.getElementById('calc-finish-type').value;
         const qty = parseInt(document.getElementById('calc-finish-qty').value) || 1;
 
-        let unit = 8.00;
+        let unit = Number(calcPrices.finishSmall);
         let label = 'Encadernação Espiral';
 
-        if (type === 'ENCADERNAÇÃO_ESPIRAL_GDE') { unit = 15.00; label = 'Encadernação Grande'; }
-        else if (type === 'PLASTIFICACAO_A4') { unit = 6.00; label = 'Plastificação A4'; }
-        else if (type === 'PLASTIFICACAO_A3') { unit = 12.00; label = 'Plastificação A3'; }
-        else if (type === 'CORTE_E_VINCO') { unit = 5.00; label = 'Refile / Corte'; }
+        if (type === 'ENCADERNAÇÃO_ESPIRAL_GDE') { unit = Number(calcPrices.finishLarge); label = 'Encadernação Grande'; }
+        else if (type === 'PLASTIFICACAO_A4') { unit = Number(calcPrices.plastA4); label = 'Plastificação A4'; }
+        else if (type === 'PLASTIFICACAO_A3') { unit = Number(calcPrices.plastA3); label = 'Plastificação A3'; }
+        else if (type === 'CORTE_E_VINCO') { unit = Number(calcPrices.refile); label = 'Refile / Corte'; }
 
         const total = unit * qty;
         document.getElementById('calc-finish-desc').innerText = `${label} (${qty}x)`;
@@ -2070,6 +2093,7 @@
             renderAdminDashboardCharts();
         } else if (subtab === 'catalog-manage') {
             renderAdminCatalog();
+            renderCalcPricesAdmin();
         } else if (subtab === 'users-manage') {
             renderUsersList();
         } else if (subtab === 'customers-manage') {
@@ -2308,6 +2332,37 @@
         });
     }
 
+    const CALC_PRICE_FIELDS = [
+        ['printBase','Impressão base A4 P&B'],['a3','Adicional papel A3'],['photo','Adicional papel fotográfico'],['couche','Adicional papel couché'],['color','Adicional colorido'],['colorHigh','Adicional alta cobertura'],['duplex','Desconto frente e verso (%)'],['ilhose','Ilhós nos 4 cantos'],['bastao','Bastão e corda'],['finishSmall','Espiral até 100 folhas'],['finishLarge','Espiral até 300 folhas'],['plastA4','Plastificação A4'],['plastA3','Plastificação A3'],['refile','Corte / refile (valor base)']
+    ];
+    function renderCalcPricesAdmin(){
+        const host=document.getElementById('calc-prices-admin'); if(!host)return;
+        host.innerHTML=CALC_PRICE_FIELDS.map(([key,label])=>`<label class="block text-[11px] font-semibold text-slate-600">${label}<div class="flex items-center mt-1"><span class="px-2 py-2 bg-slate-100 border border-r-0 rounded-l-lg text-xs">${key==='duplex'?'%':'R$'}</span><input type="number" min="0" step="0.01" data-calc-price="${key}" value="${Number(calcPrices[key] ?? DEFAULT_CALC_PRICES[key])}" class="w-full min-w-0 px-2 py-2 border rounded-r-lg text-xs"></div></label>`).join('');
+    }
+    function saveCalcPricesFromAdmin(){
+        if(!currentUser || currentUser.role!=='ADMIN'){showToast('Acesso permitido somente ao Administrador.','error');return;}
+        document.querySelectorAll('[data-calc-price]').forEach(el=>{const n=Number(el.value);if(Number.isFinite(n)&&n>=0)calcPrices[el.dataset.calcPrice]=n;});
+        localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));
+        calculatePrintCost();calculateBannerCost();calculateFinishCost();showToast('Preços das calculadoras salvos neste navegador.','success');
+    }
+    function renderCustomCalculator(){
+        const select=document.getElementById('calc-custom-product');if(!select)return;
+        const old=select.value;const items=catalog.filter(p=>p.calcEnabled);
+        select.innerHTML=items.length?items.map(p=>`<option value="${p.id}">${p.name.replace(/</g,'&lt;')} — ${formatBRL(p.price)}</option>`).join(''):'<option value="">Nenhum produto calculável cadastrado</option>';
+        if(items.some(p=>p.id===old))select.value=old;calculateCustomCost();
+    }
+    function calculateCustomCost(){
+        const select=document.getElementById('calc-custom-product');if(!select)return;
+        const p=catalog.find(x=>x.id===select.value);const qty=Math.max(0,Number(document.getElementById('calc-custom-qty')?.value)||0);const price=p?Number(p.price)||0:0;
+        document.getElementById('calc-custom-unit').innerText=`Preço unitário: ${formatBRL(price)}`;document.getElementById('calc-custom-total').innerText=formatBRL(price*qty);
+    }
+    function addCalculatedCustomToCart(){
+        if(!currentUser){showToast('Faça login para adicionar ao carrinho.','error');return;}
+        const select=document.getElementById('calc-custom-product');const p=catalog.find(x=>x.id===select.value);const qty=Number(document.getElementById('calc-custom-qty').value)||0;
+        if(!p||qty<=0){showToast('Cadastre ou selecione um produto calculável e informe a quantidade.','error');return;}
+        const total=Number(p.price)*qty;cart.push({id:'c_'+Date.now(),name:`${p.name} (${qty}x)`,qty:1,unitPrice:total,totalPrice:total});renderCart();showToast('Produto calculado adicionado ao carrinho!','success');
+    }
+
     // Catalog Admin Management
     function renderAdminCatalog() {
         const tbody = document.getElementById('admin-catalog-tbody');
@@ -2334,12 +2389,14 @@
             document.getElementById('prod-name').value = prod.name;
             document.getElementById('prod-category').value = prod.category;
             document.getElementById('prod-price').value = prod.price;
+            document.getElementById('prod-calc-enabled').checked = !!prod.calcEnabled;
         } else {
             document.getElementById('modal-prod-title').innerText = 'Cadastrar Novo Produto';
             document.getElementById('prod-id').value = '';
             document.getElementById('prod-name').value = '';
             document.getElementById('prod-category').value = 'IMPRESSAO';
             document.getElementById('prod-price').value = '';
+            document.getElementById('prod-calc-enabled').checked = false;
         }
         document.getElementById('modal-product').classList.remove('hidden');
     }
@@ -2359,6 +2416,7 @@
             saveState();
             renderAdminCatalog();
             renderCatalog();
+            renderCustomCalculator();
             showToast('Produto removido!', 'info');
         }
     }
@@ -2369,16 +2427,18 @@
         const name = document.getElementById('prod-name').value.trim();
         const category = document.getElementById('prod-category').value;
         const price = parseFloat(document.getElementById('prod-price').value) || 0;
+        const calcEnabled = document.getElementById('prod-calc-enabled').checked;
 
         if (id) {
             const p = catalog.find(x => x.id === id);
-            if (p) { p.name = name; p.category = category; p.price = price; }
+            if (p) { p.name = name; p.category = category; p.price = price; p.calcEnabled = calcEnabled; }
         } else {
             catalog.push({
                 id: 'p_' + Date.now(),
                 name: name,
                 category: category,
                 price: price,
+                calcEnabled,
                 icon: 'fa-box'
             });
         }
@@ -2387,6 +2447,7 @@
         closeProductModal();
         renderAdminCatalog();
         renderCatalog();
+        renderCustomCalculator();
         showToast('Produto salvo com sucesso!', 'success');
     }
 
@@ -2810,6 +2871,107 @@
 
     window.addEventListener('load', registerPWA);
 
+
+    // Correções de compatibilidade e navegação (v1.1.1)
+    // Mantém compatibilidade com contas antigas que armazenavam a senha em `pass`.
+    function handleLogin(e) {
+        if (e) e.preventDefault();
+        const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
+        const passwordInput = document.getElementById('login-password').value;
+        const savedUsers = JSON.parse(localStorage.getItem('pdv_users') || 'null') || users;
+        const user = savedUsers.find(u => String(u.username || '').toLowerCase() === usernameInput && String(u.password ?? u.pass ?? '') === passwordInput);
+        if (!user) { showToast('Usuário ou senha inválidos.', 'error'); return; }
+        currentUser = { ...user, fullname: user.fullname || user.name || user.username };
+        localStorage.setItem('pdv_current_user', JSON.stringify(currentUser));
+        checkAuth();
+        showToast(`Bem-vindo, ${currentUser.fullname}!`, 'success');
+    }
+
+    // Cadastro inicial disponível apenas quando ainda não há contas persistidas.
+    function showRegisterScreen() {
+        if (localStorage.getItem('pdv_users')) {
+            showToast('O cadastro inicial já foi concluído. Entre como administrador para gerenciar usuários.', 'info');
+            return;
+        }
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('register-form').classList.remove('hidden');
+        const adminRadio = document.querySelector('input[name="reg-role"][value="ADMIN"]');
+        if (adminRadio) adminRadio.checked = true;
+        document.querySelectorAll('input[name="reg-role"]').forEach(el => { if (el.value !== 'ADMIN') el.disabled = true; });
+    }
+
+    function showLoginScreen() {
+        document.getElementById('register-form').classList.add('hidden');
+        document.getElementById('login-form').classList.remove('hidden');
+        document.querySelectorAll('input[name="reg-role"]').forEach(el => el.disabled = false);
+    }
+
+    function handleRegister(event) {
+        event.preventDefault();
+        if (localStorage.getItem('pdv_users')) {
+            showToast('O cadastro inicial já foi concluído. Solicite ao administrador a criação da conta.', 'error');
+            return;
+        }
+        const fullname = document.getElementById('reg-fullname').value.trim();
+        const username = document.getElementById('reg-username').value.trim();
+        const password = document.getElementById('reg-password').value;
+        if (!fullname || !username || !password) { showToast('Preencha todos os campos.', 'error'); return; }
+        const newUser = { id: 'u_' + Date.now(), fullname, username, password, role: 'ADMIN' };
+        users = [newUser];
+        localStorage.setItem('pdv_users', JSON.stringify(users));
+        saveState();
+        document.getElementById('register-form').reset();
+        showLoginScreen();
+        showToast('Administrador cadastrado. Faça login para continuar.', 'success');
+    }
+
+    // Alterna entre as calculadoras sem alterar seus IDs ou integrações existentes.
+    function toggleCalc(type) {
+        const calculators = {
+            print: 'calc-print-box',
+            banner: 'calc-banner-box',
+            finish: 'calc-finish-box'
+        };
+        if (!Object.prototype.hasOwnProperty.call(calculators, type)) return;
+
+        Object.entries(calculators).forEach(([key, id]) => {
+            const panel = document.getElementById(id);
+            const button = document.getElementById(`btn-calc-${key}`);
+            const active = key === type;
+            if (panel) panel.classList.toggle('hidden', !active);
+            if (button) {
+                button.classList.toggle('bg-indigo-600', active);
+                button.classList.toggle('text-white', active);
+                button.classList.toggle('bg-slate-800', !active);
+                button.classList.toggle('text-slate-300', !active);
+            }
+        });
+
+        // Atualiza o valor exibido ao abrir cada painel, mantendo os mesmos cálculos.
+        if (type === 'print') calculatePrintCost();
+        if (type === 'banner') calculateBannerCost();
+        if (type === 'finish') calculateFinishCost();
+    }
+
+    // A navegação principal era chamada pelo HTML, mas não tinha implementação.
+    function switchTab(tab) {
+        if (tab === 'admin' && (!currentUser || currentUser.role !== 'ADMIN')) {
+            showToast('Acesso permitido somente ao Administrador.', 'error');
+            tab = 'pos';
+        }
+        const sections = { pos: 'pos-section', history: 'history-section', admin: 'admin-section' };
+        Object.entries(sections).forEach(([key, id]) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', key !== tab);
+            const btn = document.getElementById(`tab-${key}`);
+            if (btn) btn.className = key === tab
+                ? 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow'
+                : 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50' + (key === 'admin' && currentUser?.role !== 'ADMIN' ? ' hidden' : '');
+        });
+        if (tab === 'pos') { renderCatalog(); renderCart(); }
+        if (tab === 'history') renderSalesHistory();
+        if (tab === 'admin') switchAdminSubTab('operator-sales');
+    }
     </script>
 
     <!-- Aviso quando o PDV é aberto diretamente como arquivo local -->
