@@ -1,3 +1,1064 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDV Gráfica & Copiadora Pro - Sistema de Gestão e Caixa</title>
+    <meta name="theme-color" content="#312e81">
+    <meta name="description" content="PDV Gráfica & Copiadora Pro - sistema de gestão, caixa, gráfica, papelaria e conveniência.">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="PDV Gráfica Pro">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="pdv-app-version" content="1.1.0">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        
+        /* Print Styles for Receipts */
+        @media print {
+            body * { visibility: hidden; }
+            #receipt-print-area, #receipt-print-area * { visibility: visible; }
+            #receipt-print-area {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 80mm;
+                padding: 5px;
+                margin: 0;
+                background: #fff;
+                color: #000;
+                font-family: monospace;
+                font-size: 11px;
+            }
+            .no-print { display: none !important; }
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="h-full text-slate-800 flex flex-col antialiased selection:bg-indigo-500 selection:text-white bg-slate-100">
+
+<div id="app" class="min-h-screen flex flex-col">
+    <div id="pwa-install-update-bar" class="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-[380px] z-[60] hidden">
+    <div class="bg-white border border-slate-200 rounded-2xl shadow-2xl p-4">
+        <div class="flex items-start gap-3">
+            <div id="pwa-bar-icon" class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p id="pwa-bar-title" class="font-bold text-sm text-slate-800">Instalar aplicativo</p>
+                <p id="pwa-bar-message" class="text-xs text-slate-500 mt-0.5">Instale o PDV no dispositivo para abrir como aplicativo.</p>
+            </div>
+            <button onclick="hidePwaBar()" class="text-slate-400 hover:text-slate-700" aria-label="Fechar">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="flex gap-2 mt-3">
+            <button id="pwa-install-btn" onclick="installPWA()" class="flex-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">
+                Instalar
+            </button>
+            <button id="pwa-update-btn" onclick="applyPwaUpdate()" class="hidden flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold">
+                Atualizar agora
+            </button>
+        </div>
+    </div>
+</div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- MAIN HEADER -->
+    <header id="main-header" class="bg-indigo-900 text-white shadow-lg hidden no-print">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center font-bold shadow text-white">
+                    <i class="fa-solid fa-print text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base leading-tight">PDV Copiadora & Gráfica Pro</h1>
+                    <div class="flex items-center gap-2">
+                        <span id="header-user-badge" class="text-xs text-indigo-200 flex items-center gap-1">
+                            <i class="fa-solid fa-user-circle"></i> <span id="current-user-display">Operador</span>
+                        </span>
+                        <span id="header-role-pill" class="bg-indigo-700 text-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">OPERADOR</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Bar -->
+            <nav class="flex items-center gap-1 bg-indigo-950/60 p-1 rounded-xl">
+                <button onclick="switchTab('pos')" id="tab-pos" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow">
+                    <i class="fa-solid fa-calculator text-xs"></i> Frente de Caixa
+                </button>
+                <button onclick="switchTab('history')" id="tab-history" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50">
+                    <i class="fa-solid fa-receipt text-xs"></i> Histórico Vendas
+                </button>
+                <button onclick="switchTab('admin')" id="tab-admin" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50 hidden">
+                    <i class="fa-solid fa-chart-line text-xs"></i> Admin & Relatórios
+                </button>
+            </nav>
+
+            <button onclick="handleLogout()" class="px-3 py-1.5 text-xs font-semibold text-rose-300 hover:text-rose-100 hover:bg-rose-900/40 rounded-lg transition flex items-center gap-1">
+                <i class="fa-solid fa-right-from-bracket"></i> Sair
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col">
+        <!-- AUTH SECTION (LOGIN / REGISTRATION) -->
+        <section id="auth-section" class="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900">
+            <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-100">
+                <div class="p-8 text-center bg-indigo-600 text-white relative">
+                    <div class="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center mx-auto mb-3 backdrop-blur-sm text-white">
+                        <i class="fa-solid fa-print text-3xl"></i>
+                    </div>
+                    <h2 class="text-2xl font-black tracking-tight">Gráfica & Copiadora Pro</h2>
+                    <p class="text-indigo-200 text-xs mt-1">Acesse para operar o Caixa PDV ou Administrar</p>
+                </div>
+
+                <!-- LOGIN FORM -->
+                <form id="login-form" onsubmit="handleLogin(event)" class="p-8 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário / Login</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-user absolute left-3 top-3 text-slate-400 text-xs"></i>
+                            <input type="text" id="login-username" required class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm outline-none transition" placeholder="Ex: joao, maria, admin">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Senha</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-lock absolute left-3 top-3 text-slate-400 text-xs"></i>
+                            <input type="password" id="login-password" required class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm outline-none transition" placeholder="••••••••">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-right-to-bracket"></i>
+                        <span>Entrar no Sistema</span>
+                    </button>
+<div id="first-setup-box" class="pt-2 text-center">
+    <button type="button" onclick="showRegisterScreen()" class="text-xs font-bold text-indigo-600 hover:underline">
+        Primeiro acesso? Cadastrar Conta de Administrador
+    </button>
+</div>
+                    <!-- Quick Demo Users Helper -->
+                    <div class="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+                        <p class="font-bold text-slate-700">Contas Demonstrativas Rápidas:</p>
+                        <div class="flex flex-wrap gap-1.5 pt-1">
+                            <button type="button" onclick="quickFill('admin','1234')" class="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded font-semibold text-[10px]">Admin (admin)</button>
+                            <button type="button" onclick="quickFill('joao','1234')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-semibold text-[10px]">Op: João Silva</button>
+                            <button type="button" onclick="quickFill('maria','1234')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-semibold text-[10px]">Op: Maria Santos</button>
+                            <button type="button" onclick="quickFill('carlos','1234')" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded font-semibold text-[10px]">Op: Carlos Souza</button>
+                        </div>
+                    </div>
+
+                    <div class="pt-2 border-t border-slate-100 text-center">
+                        <span class="text-[10px] text-slate-400">
+                            <i class="fa-solid fa-lock mr-1"></i> Novos usuários são cadastrados exclusivamente pelo Administrador.
+                        </span>
+                    </div>
+                </form>
+
+                <!-- REGISTER FORM -->
+                <form id="register-form" onsubmit="handleRegister(event)" class="p-8 space-y-4 hidden">
+                    <h3 class="text-base font-bold text-slate-800 border-b pb-2">Criar Nova Conta</h3>
+                    
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome Completo</label>
+                        <input type="text" id="reg-fullname" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário para Login</label>
+                        <input type="text" id="reg-username" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Senha</label>
+                        <input type="password" id="reg-password" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Perfil de Acesso</label>
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="reg-role" value="ADMIN">
+                                <div>
+                                    <span class="block text-xs font-bold text-slate-800">Administrador</span>
+                                    <span class="block text-[10px] text-slate-500">Acesso Geral</span>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-2 p-2.5 border rounded-lg cursor-pointer hover:bg-slate-50">
+                                <input type="radio" name="reg-role" value="OPERATOR" checked>
+                                <div>
+                                    <span class="block text-xs font-bold text-slate-800">Operador</span>
+                                    <span class="block text-[10px] text-slate-500">Caixa PDV</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition text-sm">
+                        Cadastrar Conta
+                    </button>
+
+                    <div class="text-center pt-1">
+                        <button type="button" onclick="showLoginScreen()" class="text-xs text-slate-500 hover:text-slate-800 underline">
+                            Voltar para Login
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- POS / FRENTE DE CAIXA SECTION -->
+        <section id="pos-section" class="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full gap-6 grid grid-cols-1 lg:grid-cols-12 hidden">
+            <!-- Left Column: Dynamic Print Calculators & Catalog -->
+            <div class="lg:col-span-7 flex flex-col gap-6">
+                
+                <!-- Print Shop Calculators Box -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="bg-slate-900 text-white px-5 py-3 flex justify-between items-center">
+                        <span class="font-bold text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-indigo-400"></i>
+                            Calculadoras Especiais de Gráfica
+                        </span>
+                        <div class="flex gap-1 text-xs font-semibold">
+                            <button onclick="toggleCalc('print')" id="btn-calc-print" class="px-3 py-1 rounded-lg bg-indigo-600 text-white transition">Impressão / Cópias</button>
+                            <button onclick="toggleCalc('banner')" id="btn-calc-banner" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Banner / Plotter (m²)</button>
+                            <button onclick="toggleCalc('finish')" id="btn-calc-finish" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Acabamentos</button>
+                        </div>
+                    </div>
+
+                    <div class="p-5">
+                        <!-- 1. Document Print & Copy Calculator -->
+                        <div id="calc-print-box" class="space-y-4">
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nº Páginas</label>
+                                    <input type="number" id="calc-pages" value="1" min="1" oninput="calculatePrintCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nº Cópias</label>
+                                    <input type="number" id="calc-copies" value="1" min="1" oninput="calculatePrintCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Tipo de Papel</label>
+                                    <select id="calc-paper" onchange="calculatePrintCost()" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm">
+                                        <option value="A4_SULFITE">A4 Sulfite 75g</option>
+                                        <option value="A4_OFFSET">A4 Offset 90g</option>
+                                        <option value="A4_FOTO">A4 Fotográfico 180g</option>
+                                        <option value="A4_COUCHE">A4 Couché 150g</option>
+                                        <option value="A3_SULFITE">A3 Sulfite 75g</option>
+                                        <option value="A3_COUCHE">A3 Couché 170g</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Modo de Tinta</label>
+                                    <select id="calc-color" onchange="calculatePrintCost()" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm">
+                                        <option value="PB">Preto e Branco (P&B)</option>
+                                        <option value="COLOR">Colorido Padrão</option>
+                                        <option value="COLOR_HIGH">Colorido Alta Cobertura</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-4 text-xs font-medium text-slate-700 pt-1">
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="calc-duplex" onchange="calculatePrintCost()" class="rounded text-indigo-600 focus:ring-indigo-500">
+                                    <span>Frente e Verso (Duplex)</span>
+                                </label>
+                            </div>
+
+                            <div class="flex items-center justify-between bg-indigo-50 p-3.5 rounded-xl border border-indigo-100">
+                                <div>
+                                    <div class="text-xs text-indigo-800 font-medium">
+                                        Total Páginas Impressas: <span id="calc-total-impressions" class="font-bold">1</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500">
+                                        Preço un: R$ <span id="calc-unit-price">0.50</span>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span id="calc-print-total" class="text-xl font-black text-indigo-950">R$ 0,50</span>
+                                    <button onclick="addCalculatedPrintToCart()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                                        <i class="fa-solid fa-cart-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Banner / Plotter Calculator -->
+                        <div id="calc-banner-box" class="space-y-4 hidden">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Largura (m)</label>
+                                    <input type="number" id="calc-width" step="0.1" value="1.0" min="0.1" oninput="calculateBannerCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Altura (m)</label>
+                                    <input type="number" id="calc-height" step="0.1" value="1.0" min="0.1" oninput="calculateBannerCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Material Base</label>
+                                    <select id="calc-material" onchange="calculateBannerCost()" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-sm">
+                                        <option value="45">Lona BR 440g (R$ 45/m²)</option>
+                                        <option value="60">Adesivo Vinil Brilho (R$ 60/m²)</option>
+                                        <option value="75">Lona Backlight (R$ 75/m²)</option>
+                                        <option value="90">Tecido Canvas (R$ 90/m²)</option>
+                                        <option value="80">Adesivo Microperfurado (R$ 80/m²)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-700 pt-1">
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="calc-extra-ilhose" onchange="calculateBannerCost()" class="rounded text-emerald-600 focus:ring-emerald-500">
+                                    <span>Ilhós nos 4 cantos (+R$ 10,00)</span>
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" id="calc-extra-bastao" onchange="calculateBannerCost()" class="rounded text-emerald-600 focus:ring-emerald-500">
+                                    <span>Bastão e Corda (+R$ 15,00)</span>
+                                </label>
+                            </div>
+
+                            <div class="flex items-center justify-between bg-emerald-50 p-3.5 rounded-xl border border-emerald-100">
+                                <div>
+                                    <div class="text-xs text-emerald-800 font-medium">
+                                        Área Total: <span id="calc-banner-area" class="font-bold">1.00 m²</span>
+                                    </div>
+                                    <div class="text-[11px] text-slate-500">Cálculo proporcional por metro quadrado</div>
+                                </div>
+                                <div class="flex items-center gap-3">
+                                    <span id="calc-banner-total" class="text-xl font-black text-emerald-950">R$ 45,00</span>
+                                    <button onclick="addCalculatedBannerToCart()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                                        <i class="fa-solid fa-cart-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Finishing & Binding Calculator -->
+                        <div id="calc-finish-box" class="space-y-4 hidden">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Serviço de Acabamento</label>
+                                    <select id="calc-finish-type" onchange="calculateFinishCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+                                        <option value="ENCADERNAÇÃO_ESPIRAL_PEQ">Encadernação Espiral até 100 fls (R$ 8,00)</option>
+                                        <option value="ENCADERNAÇÃO_ESPIRAL_GDE">Encadernação Espiral até 300 fls (R$ 15,00)</option>
+                                        <option value="PLASTIFICACAO_A4">Plastificação Polaseal A4 (R$ 6,00)</option>
+                                        <option value="PLASTIFICACAO_A3">Plastificação Polaseal A3 (R$ 12,00)</option>
+                                        <option value="CORTE_E_VINCO">Corte / Refile Manual (R$ 5,00/cento)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Quantidade</label>
+                                    <input type="number" id="calc-finish-qty" value="1" min="1" oninput="calculateFinishCost()" class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500">
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between bg-purple-50 p-3.5 rounded-xl border border-purple-100">
+                                <span id="calc-finish-desc" class="text-xs text-purple-900 font-semibold">Encadernação Espiral (1x)</span>
+                                <div class="flex items-center gap-3">
+                                    <span id="calc-finish-total" class="text-xl font-black text-purple-950">R$ 8,00</span>
+                                    <button onclick="addCalculatedFinishToCart()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                                        <i class="fa-solid fa-cart-plus"></i> Adicionar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PAPELARIA & CONVENIÊNCIA -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="px-4 py-3 bg-amber-50 border-b border-amber-100 flex items-center justify-between">
+                        <div>
+                            <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                <i class="fa-solid fa-store text-amber-600"></i> Papelaria & Conveniência
+                            </h3>
+                            <p class="text-[10px] text-slate-500">Acesso rápido aos produtos de balcão</p>
+                        </div>
+                        <div class="flex gap-1">
+                            <button onclick="setCategoryFilter('PAPELARIA')" class="px-2.5 py-1.5 rounded-lg bg-indigo-100 text-indigo-700 text-[10px] font-bold hover:bg-indigo-200 transition">
+                                Papelaria
+                            </button>
+                            <button onclick="setCategoryFilter('CONVENIENCIA')" class="px-2.5 py-1.5 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold hover:bg-amber-200 transition">
+                                Conveniência
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Product Catalog & Quick Add -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
+                    <div class="p-4 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3 bg-slate-50">
+                        <div class="relative w-full sm:w-64">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-xs"></i>
+                            <input type="text" id="catalog-search" oninput="renderCatalog()" placeholder="Buscar produto ou serviço..." class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        </div>
+                        <div id="catalog-category-filter" class="flex gap-1 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                            <!-- Rendered dynamically -->
+                        </div>
+                    </div>
+
+                    <div id="catalog-grid" class="p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto max-h-[380px]">
+                        <!-- Dynamic Product Cards -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Cart & Order Total -->
+            <div class="lg:col-span-5 flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-full">
+                <div class="p-4 bg-slate-900 text-white flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-cart-shopping text-indigo-400"></i>
+                        <h2 class="font-bold text-sm">Carrinho de Compras</h2>
+                    </div>
+                    <button onclick="clearCart()" class="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1 transition font-medium">
+                        <i class="fa-solid fa-trash-can text-xs"></i> Limpar
+                    </button>
+                </div>
+
+                <!-- Customer / Comanda Type -->
+                <div class="p-3 bg-slate-50 border-b border-slate-200 space-y-2 text-xs">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">Tipo de Cliente</label>
+                            <select id="cart-customer-type" onchange="handleCartCustomerTypeChange()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white focus:ring-1 focus:ring-indigo-500">
+                                <option value="CONSUMIDOR">Consumidor Final</option>
+                                <option value="MENSALISTA">Mensalista</option>
+                                <option value="CREDITO_ANTECIPADO">Crédito Antecipado</option>
+                            </select>
+                        </div>
+                        <div id="registered-customer-box" class="hidden">
+                            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">Cliente Cadastrado</label>
+                            <select id="cart-customer-id" onchange="selectRegisteredCustomer()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-md text-xs bg-white focus:ring-1 focus:ring-indigo-500">
+                                <option value="">Selecione o cliente...</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">Nome do Cliente</label>
+                            <input type="text" id="cart-customer-name" placeholder="Nome do cliente" class="w-full px-2.5 py-1 border border-slate-300 rounded-md text-xs bg-white focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-500 mb-0.5">CPF / CNPJ</label>
+                            <input type="text" id="cart-customer-cpf" placeholder="000.000.000-00" class="w-full px-2.5 py-1 border border-slate-300 rounded-md text-xs bg-white focus:ring-1 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div id="customer-credit-info" class="hidden text-[10px] rounded-lg px-2.5 py-2 bg-emerald-50 border border-emerald-100 text-emerald-800 font-semibold"></div>
+                </div>
+
+                <!-- Cart List -->
+                <div id="cart-items-list" class="flex-1 p-4 overflow-y-auto space-y-2 min-h-[200px] max-h-[340px] divide-y divide-slate-100">
+                    <!-- Dynamic Items -->
+                </div>
+
+                <!-- Cart Summary & Discount Footer -->
+                <div class="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
+                    <div class="flex gap-2 items-center text-xs">
+                        <span class="font-bold text-slate-600">Desconto:</span>
+                        <input type="number" id="cart-discount-val" value="0" min="0" oninput="updateCartTotals()" class="w-20 px-2 py-1 border border-slate-300 rounded text-right bg-white font-semibold">
+                        <select id="cart-discount-type" onchange="updateCartTotals()" class="px-2 py-1 border border-slate-300 rounded bg-white font-semibold">
+                            <option value="REAL">R$</option>
+                            <option value="PERCENT">%</option>
+                        </select>
+                    </div>
+
+                    <div class="space-y-1 text-xs text-slate-600 pt-2 border-t border-slate-200">
+                        <div class="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span id="summary-subtotal" class="font-bold text-slate-800">R$ 0,00</span>
+                        </div>
+                        <div class="flex justify-between text-rose-600">
+                            <span>Desconto:</span>
+                            <span id="summary-discount">- R$ 0,00</span>
+                        </div>
+                        <div class="flex justify-between text-base font-black text-slate-900 pt-1 border-t border-slate-300">
+                            <span>TOTAL GERAL:</span>
+                            <span id="summary-total" class="text-indigo-600">R$ 0,00</span>
+                        </div>
+                    </div>
+
+                    <button onclick="openPaymentModal()" id="btn-checkout" disabled class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 text-sm">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>Finalizar & Pagar</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SALES HISTORY SECTION -->
+        <section id="history-section" class="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full space-y-6 hidden">
+            <!-- Metrics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-indigo-100 text-indigo-600 rounded-xl">
+                        <i class="fa-solid fa-sack-dollar text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Total Faturado</p>
+                        <h3 id="kpi-total-sales" class="text-lg font-black text-slate-900">R$ 0,00</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-blue-100 text-blue-600 rounded-xl">
+                        <i class="fa-solid fa-receipt text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Nº de Vendas</p>
+                        <h3 id="kpi-count-sales" class="text-lg font-black text-slate-900">0</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl">
+                        <i class="fa-solid fa-chart-line text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Ticket Médio</p>
+                        <h3 id="kpi-avg-ticket" class="text-lg font-black text-slate-900">R$ 0,00</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                    <div class="p-3 bg-amber-100 text-amber-600 rounded-xl">
+                        <i class="fa-solid fa-credit-card text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold uppercase text-slate-400">Método Principal</p>
+                        <h3 id="kpi-top-method" class="text-lg font-black text-slate-900">---</h3>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Table -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <h2 class="font-bold text-slate-800 text-sm">Histórico Geral de Vendas Realizadas</h2>
+                    <span class="text-xs text-slate-500">Registros no sistema</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-600">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                            <tr>
+                                <th class="px-4 py-3">Código / Data</th>
+                                <th class="px-4 py-3">Operador</th>
+                                <th class="px-4 py-3">Cliente</th>
+                                <th class="px-4 py-3">Itens</th>
+                                <th class="px-4 py-3">Pagamento</th>
+                                <th class="px-4 py-3">Total</th>
+                                <th class="px-4 py-3 text-right">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sales-history-tbody" class="divide-y divide-slate-100">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- ADMIN PANEL SECTION (PROTECTED & EXPANDED) -->
+        <section id="admin-section" class="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full space-y-6 hidden">
+            <!-- Admin Sub-Navigation Tabs -->
+            <div class="bg-slate-900 p-1.5 rounded-2xl flex flex-wrap gap-1 text-xs font-bold text-white shadow-sm">
+                <button onclick="switchAdminSubTab('operator-sales')" id="admin-subtab-operator-sales" class="px-4 py-2 rounded-xl bg-indigo-600 text-white transition flex items-center gap-2">
+                    <i class="fa-solid fa-user-group text-xs"></i> Vendas por Operador
+                </button>
+                <button onclick="switchAdminSubTab('dashboard')" id="admin-subtab-dashboard" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-chart-pie text-xs"></i> Relatórios Gerais
+                </button>
+                <button onclick="switchAdminSubTab('catalog-manage')" id="admin-subtab-catalog-manage" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-tags text-xs"></i> Gerenciar Produtos & Preços
+                </button>
+                <button onclick="switchAdminSubTab('users-manage')" id="admin-subtab-users-manage" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-users-gear text-xs"></i> Usuários do Sistema
+                </button>
+                <button onclick="switchAdminSubTab('customers-manage')" id="admin-subtab-customers-manage" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                    <i class="fa-solid fa-address-book text-xs"></i> Clientes
+                </button>
+            </div>
+            <!-- PAINEL DE GESTÃO DE USUÁRIOS (VISÍVEL APENAS NA ÁREA ADMIN) -->
+<div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-6">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+        <div>
+            <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid fa-users-gear text-indigo-600"></i>
+                Gestão de Usuários e Operadores
+            </h3>
+            <p class="text-xs text-slate-500">Gerencie quem tem acesso ao sistema PDV (Apenas 1 Admin permitido)</p>
+        </div>
+        <button onclick="openAddUserModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow transition">
+            <i class="fa-solid fa-user-plus"></i>
+            Adicionar Novo Usuário
+        </button>
+    </div>
+
+    <!-- Tabela de Usuários Registrados -->
+    <div class="overflow-x-auto mt-4">
+        <table class="w-full text-left text-xs text-slate-600">
+            <thead class="bg-slate-50 text-slate-700 font-bold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                <tr>
+                    <th class="py-3 px-4">Nome Completo</th>
+                    <th class="py-3 px-4">Usuário / Login</th>
+                    <th class="py-3 px-4">Perfil</th>
+                    <th class="py-3 px-4 text-right">Ações</th>
+                </tr>
+            </thead>
+            <tbody id="users-table-body" class="divide-y divide-slate-100">
+                <!-- Linhas inseridas dinamicamente via JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- MODAL PARA ADICIONAR USUÁRIO PELA ÁREA ADMIN -->
+<div id="add-user-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+        <div class="flex justify-between items-center border-b pb-3">
+            <h3 class="font-bold text-slate-800 text-base">Cadastrar Novo Usuário</h3>
+            <button onclick="closeAddUserModal()" class="text-slate-400 hover:text-slate-600 text-lg">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <form id="admin-add-user-form" onsubmit="handleAddUserFromAdmin(event)" class="space-y-3">
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome Completo</label>
+                <input type="text" id="admin-reg-fullname" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário para Login</label>
+                <input type="text" id="admin-reg-username" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Senha</label>
+                <input type="password" id="admin-reg-password" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Perfil de Acesso</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <label class="flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer hover:bg-slate-50">
+                        <input type="radio" name="admin-reg-role" value="ADMIN">
+                        <div>
+                            <span class="block text-xs font-bold text-slate-800">Administrador</span>
+                            <span class="block text-[10px] text-slate-500">Máx: 1 no sistema</span>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-2 p-2.5 border rounded-xl cursor-pointer hover:bg-slate-50">
+                        <input type="radio" name="admin-reg-role" value="OPERATOR" checked>
+                        <div>
+                            <span class="block text-xs font-bold text-slate-800">Operador</span>
+                            <span class="block text-[10px] text-slate-500">Caixa PDV</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+            <div class="pt-2 flex gap-2 justify-end">
+                <button type="button" onclick="closeAddUserModal()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50">Cancelar</button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">Cadastrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+            <!-- SUBTAB 1: VENDAS POR OPERADOR (THE NEWLY REQUESTED FEATURE) -->
+            <div id="admin-subview-operator-sales" class="space-y-6">
+                <!-- Header & Time Filter Bar -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-user text-indigo-600"></i> Desempenho e Vendas por Operador
+                        </h2>
+                        <p class="text-xs text-slate-500">Veja detalhadamente o que cada operador vendeu individualmente por período.</p>
+                    </div>
+
+                    <!-- Period Filter Controls -->
+                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+                        <button onclick="setOperatorPeriodFilter('day')" id="op-filter-day" class="px-3 py-1.5 rounded-lg bg-white shadow text-indigo-600 font-bold transition">Hoje (Dia)</button>
+                        <button onclick="setOperatorPeriodFilter('week')" id="op-filter-week" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Esta Semana</button>
+                        <button onclick="setOperatorPeriodFilter('month')" id="op-filter-month" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Este Mês</button>
+                        <button onclick="setOperatorPeriodFilter('year')" id="op-filter-year" class="px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition">Este Ano</button>
+                    </div>
+                </div>
+
+                <!-- Operator Comparison Chart & Highlights -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Chart Column -->
+                    <div class="lg:col-span-7 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+                        <h3 class="font-bold text-slate-800 text-sm mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-chart-column text-indigo-500"></i> Comparativo de Faturamento (R$) por Operador
+                        </h3>
+                        <div class="flex-1 min-h-[250px] relative">
+                            <canvas id="operatorComparisonChart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Summary Cards Column per Operator -->
+                    <div class="lg:col-span-5 space-y-3" id="operator-summary-cards-container">
+                        <!-- Rendered dynamically -->
+                    </div>
+                </div>
+
+                <!-- Detailed Operator Breakdown Table -->
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold uppercase text-slate-500">Filtrar Operador:</span>
+                            <select id="op-breakdown-select" onchange="renderOperatorDetailedTable()" class="px-3 py-1.5 border border-slate-300 rounded-xl text-xs font-bold bg-white text-slate-800 focus:ring-2 focus:ring-indigo-500">
+                                <option value="ALL">-- Todos os Operadores --</option>
+                            </select>
+                        </div>
+                        <span id="op-table-period-badge" class="text-xs font-bold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">Período: Hoje</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-slate-600">
+                            <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                                <tr>
+                                    <th class="px-4 py-3">Operador</th>
+                                    <th class="px-4 py-3">Data/Hora</th>
+                                    <th class="px-4 py-3">Produto / Serviço Vendido</th>
+                                    <th class="px-4 py-3 text-center">Qtd / Área</th>
+                                    <th class="px-4 py-3">Preço Un.</th>
+                                    <th class="px-4 py-3">Subtotal</th>
+                                    <th class="px-4 py-3">Cliente</th>
+                                    <th class="px-4 py-3">Pagamento</th>
+                                </tr>
+                            </thead>
+                            <tbody id="operator-detailed-tbody" class="divide-y divide-slate-100">
+                                <!-- Dynamic breakdown rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBTAB 2: GENERAL DASHBOARD -->
+            <div id="admin-subview-dashboard" class="space-y-6 hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-sm mb-4">Evolução do Faturamento</h3>
+                        <canvas id="revenueTimelineChart" class="max-h-[280px]"></canvas>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                        <h3 class="font-bold text-slate-800 text-sm mb-4">Vendas por Categoria de Serviço</h3>
+                        <canvas id="categoryShareChart" class="max-h-[280px]"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBTAB 3: CATALOG & PRICING MANAGEMENT -->
+            <div id="admin-subview-catalog-manage" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm">Gerenciar Catálogo de Produtos e Serviços</h3>
+                        <p class="text-xs text-slate-500">Adicione novos itens ou altere preços do caixa</p>
+                    </div>
+                    <button onclick="openProductModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                        <i class="fa-solid fa-plus"></i> Novo Produto
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-600">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                            <tr>
+                                <th class="p-3">Nome do Produto/Serviço</th>
+                                <th class="p-3">Categoria</th>
+                                <th class="p-3">Preço Base (R$)</th>
+                                <th class="p-3 text-right">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-catalog-tbody" class="divide-y divide-slate-100">
+                            <!-- Dynamic admin products list -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SUBTAB 4: USERS MANAGEMENT -->
+            <div id="admin-subview-users-manage" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm">Usuários Cadastrados no Sistema</h3>
+                        <p class="text-xs text-slate-500">Somente o Administrador pode criar e excluir usuários.</p>
+                    </div>
+                    <button onclick="openAddUserModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                        <i class="fa-solid fa-user-plus"></i> Novo Usuário
+                    </button>
+                </div>
+                <div class="p-4">
+                    <ul id="users-list-ul" class="divide-y divide-slate-100">
+                        <!-- Dynamic users -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- SUBTAB 5: CUSTOMER MANAGEMENT -->
+            <div id="admin-subview-customers-manage" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+                <div class="p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-address-book text-indigo-600"></i> Clientes Mensalistas e Crédito Antecipado
+                        </h3>
+                        <p class="text-xs text-slate-500">Cadastro e controle exclusivo do Administrador.</p>
+                    </div>
+                    <button onclick="openCustomerModal()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition">
+                        <i class="fa-solid fa-user-plus"></i> Novo Cliente
+                    </button>
+                </div>
+                <div class="p-4 overflow-x-auto">
+                    <table class="w-full text-left text-xs text-slate-600">
+                        <thead class="bg-slate-100 text-slate-700 uppercase font-bold text-[10px]">
+                            <tr>
+                                <th class="p-3">Cliente</th>
+                                <th class="p-3">CPF / CNPJ</th>
+                                <th class="p-3">Tipo</th>
+                                <th class="p-3">Saldo / Limite</th>
+                                <th class="p-3 text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-customers-tbody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL: PAYMENT CHECKOUT -->
+    <div id="modal-payment" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div class="p-4 bg-indigo-600 text-white flex justify-between items-center">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <i class="fa-solid fa-credit-card"></i> Pagamento & Fechamento
+                </h3>
+                <button onclick="closePaymentModal()" class="text-indigo-200 hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center">
+                    <span class="text-xs text-slate-500 uppercase font-bold">Valor Total Final</span>
+                    <div id="modal-pay-amount" class="text-3xl font-black text-indigo-600">R$ 0,00</div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-2">Forma de Pagamento</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" onclick="selectPayMethod('PIX')" id="pay-btn-PIX" class="p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-indigo-600 bg-indigo-50 text-indigo-700">
+                            <i class="fa-brands fa-pix text-lg"></i> PIX
+                        </button>
+                        <button type="button" onclick="selectPayMethod('DINHEIRO')" id="pay-btn-DINHEIRO" class="p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50">
+                            <i class="fa-solid fa-money-bill-wave text-lg"></i> Dinheiro
+                        </button>
+                        <button type="button" onclick="selectPayMethod('CARTAO_DEBITO')" id="pay-btn-CARTAO_DEBITO" class="p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50">
+                            <i class="fa-solid fa-credit-card text-lg"></i> C. Débito
+                        </button>
+                        <button type="button" onclick="selectPayMethod('CARTAO_CREDITO')" id="pay-btn-CARTAO_CREDITO" class="p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50">
+                            <i class="fa-solid fa-credit-card text-lg"></i> C. Crédito
+                        </button>
+                        <button type="button" onclick="selectPayMethod('MENSALISTA')" id="pay-btn-MENSALISTA" class="hidden p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50">
+                            <i class="fa-solid fa-calendar-check text-lg"></i> Lançar na Conta
+                        </button>
+                        <button type="button" onclick="selectPayMethod('CREDITO_ANTECIPADO')" id="pay-btn-CREDITO_ANTECIPADO" class="hidden p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50">
+                            <i class="fa-solid fa-wallet text-lg"></i> Usar Crédito
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Cash change field -->
+                <div id="cash-change-box" class="p-3 bg-amber-50 rounded-xl border border-amber-200 hidden space-y-2">
+                    <div class="flex justify-between items-center text-xs font-bold text-amber-900">
+                        <span>Valor Entregue pelo Cliente:</span>
+                        <input type="number" id="cash-given-input" step="0.01" value="0.00" oninput="calcTroco()" class="w-24 px-2 py-1 text-right border border-amber-300 rounded bg-white">
+                    </div>
+                    <div class="flex justify-between items-center text-xs font-bold text-amber-900 pt-1 border-t border-amber-200">
+                        <span>Troco:</span>
+                        <span id="cash-troco-display" class="text-sm font-extrabold text-emerald-700">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <button onclick="confirmOrderCheckout()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl shadow-lg shadow-emerald-600/20 transition text-sm flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-print"></i> Concluir Venda e Gerar Comprovante
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RECEIPT & PRINT PREVIEW -->
+    <div id="modal-receipt" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+            <div class="p-3 bg-slate-900 text-white flex justify-between items-center no-print">
+                <span class="text-xs font-bold">Comprovante de Venda</span>
+                <button onclick="closeReceiptModal()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Receipt Layout (Used for both Screen and Printing) -->
+            <div id="receipt-print-area" class="p-5 font-mono text-[11px] leading-tight space-y-3 bg-white text-slate-900">
+                <div class="text-center border-b pb-2 border-dashed border-slate-400">
+                    <h2 class="font-black text-sm">GRÁFICA & COPIADORA PRO</h2>
+                    <p class="text-[10px]">Rua das Impressões, 1000 - Centro</p>
+                    <p class="text-[10px]">CNPJ: 00.123.456/0001-89 - Tel: (41) 99999-8888</p>
+                </div>
+
+                <div class="border-b pb-2 border-dashed border-slate-400 space-y-0.5">
+                    <p><b>CÓDIGO:</b> <span id="rec-id">#0000</span></p>
+                    <p><b>DATA:</b> <span id="rec-date">00/00/0000 00:00</span></p>
+                    <p><b>OPERADOR:</b> <span id="rec-operator">---</span></p>
+                    <p><b>CLIENTE:</b> <span id="rec-customer">Consumidor Final</span></p>
+                </div>
+
+                <div class="border-b pb-2 border-dashed border-slate-400">
+                    <p class="font-bold mb-1">ITENS DA COMPRA:</p>
+                    <div id="rec-items-list" class="space-y-1">
+                        <!-- Dynamic items -->
+                    </div>
+                </div>
+
+                <div class="space-y-0.5 text-right font-bold">
+                    <p>Subtotal: <span id="rec-subtotal">R$ 0,00</span></p>
+                    <p>Desconto: <span id="rec-discount">R$ 0,00</span></p>
+                    <p class="text-xs font-black pt-1 border-t border-slate-400">TOTAL: <span id="rec-total">R$ 0,00</span></p>
+                    <p class="text-[10px] font-normal pt-1">Forma de Pagamento: <span id="rec-paymethod">PIX</span></p>
+                </div>
+
+                <div class="text-center pt-3 border-t border-dashed border-slate-400 text-[9px] text-slate-600">
+                    <p>Obrigado pela preferência!</p>
+                    <p>Guarde este comprovante para eventuais trocas.</p>
+                </div>
+            </div>
+
+            <div class="p-4 bg-slate-50 border-t flex gap-2 no-print">
+                <button onclick="window.print()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5">
+                    <i class="fa-solid fa-print"></i> Imprimir
+                </button>
+                <button onclick="closeReceiptModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT CUSTOMER (ADMIN ONLY) -->
+    <div id="modal-customer" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div class="p-4 bg-indigo-600 text-white flex justify-between items-center">
+                <div>
+                    <h3 class="font-bold text-sm" id="modal-customer-title">Cadastrar Cliente</h3>
+                    <p class="text-[10px] text-indigo-200">Disponível somente para Administrador</p>
+                </div>
+                <button onclick="closeCustomerModal()" class="text-indigo-200 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="customer-form" onsubmit="handleSaveCustomer(event)" class="p-6 space-y-3">
+                <input type="hidden" id="customer-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome / Razão Social</label>
+                    <input type="text" id="customer-name" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">CPF / CNPJ</label>
+                        <input type="text" id="customer-cpf" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Telefone</label>
+                        <input type="text" id="customer-phone" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tipo de Cliente</label>
+                    <select id="customer-type" onchange="toggleCustomerFinancialFields()" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="MENSALISTA">Mensalista</option>
+                        <option value="CREDITO_ANTECIPADO">Crédito Antecipado</option>
+                    </select>
+                </div>
+                <div id="customer-monthly-limit-box">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Limite Mensal (R$)</label>
+                    <input type="number" id="customer-monthly-limit" min="0" step="0.01" value="0" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                    <p class="text-[10px] text-slate-400 mt-1">Use 0 para não limitar o valor mensal.</p>
+                </div>
+                <div id="customer-credit-box" class="hidden">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Crédito Inicial (R$)</label>
+                    <input type="number" id="customer-credit-balance" min="0" step="0.01" value="0" class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="pt-2 flex gap-2 justify-end">
+                    <button type="button" onclick="closeCustomerModal()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold">Salvar Cliente</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: ADD / EDIT PRODUCT -->
+    <div id="modal-product" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            <div class="p-4 bg-indigo-600 text-white flex justify-between items-center">
+                <h3 class="font-bold text-sm" id="modal-prod-title">Cadastrar Novo Produto / Serviço</h3>
+                <button onclick="closeProductModal()" class="text-indigo-200 hover:text-white">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form onsubmit="handleSaveProduct(event)" class="p-6 space-y-3">
+                <input type="hidden" id="prod-id">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome do Item</label>
+                    <input type="text" id="prod-name" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Categoria</label>
+                    <select id="prod-category" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="IMPRESSAO">Impressão & Cópias</option>
+                        <option value="COMUNICACAO_VISUAL">Comunicação Visual (Banners, Adesivos)</option>
+                        <option value="ACABAMENTO">Acabamentos & Plastificação</option>
+                        <option value="PAPELARIA">Papelaria</option>
+                        <option value="CONVENIENCIA">Conveniência</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Preço Unitário Base (R$)</label>
+                    <input type="number" id="prod-price" step="0.01" min="0" required class="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <button type="submit" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition">
+                    Salvar Produto
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="supabase-config.js"></script>
+<script src="cloud-sync.js"></script>
+
+<script>
+/* APPLICATION STATE & SEEDED DATA */
 // Exibe a tela de registro
 function showRegisterScreen() {
     document.getElementById('login-form').classList.add('hidden');
@@ -46,3 +1107,1823 @@ function handleRegister(event) {
     alert(`Usuário ${username} cadastrado com sucesso! Faça login para continuar.`);
     showLoginScreen();
 }
+// System Users (Operators & Admin)
+let users = JSON.parse(localStorage.getItem('pdv_users')) || [
+    { id: 'u1', username: 'admin', fullname: 'Administrador Geral', role: 'ADMIN', pass: '1234' },
+    { id: 'u2', username: 'joao', fullname: 'João Silva', role: 'OPERATOR', pass: '1234' },
+    { id: 'u3', username: 'maria', fullname: 'Maria Santos', role: 'OPERATOR', pass: '1234' },
+    { id: 'u4', username: 'carlos', fullname: 'Carlos Souza', role: 'OPERATOR', pass: '1234' }
+];
+
+// Current logged user
+let currentUser = JSON.parse(localStorage.getItem('pdv_current_user')) || null;
+
+// Products & Services Catalog
+let catalog = JSON.parse(localStorage.getItem('pdv_catalog')) || [
+    { id: 'p1', name: 'Impressão A4 Preto e Branco', category: 'IMPRESSAO', price: 0.50, icon: 'fa-file-lines' },
+    { id: 'p2', name: 'Impressão A4 Colorida', category: 'IMPRESSAO', price: 1.50, icon: 'fa-file-image' },
+    { id: 'p3', name: 'Impressão A3 Colorida', category: 'IMPRESSAO', price: 3.50, icon: 'fa-file' },
+    { id: 'p4', name: 'Banner Lona 440g (m²)', category: 'COMUNICACAO_VISUAL', price: 45.00, icon: 'fa-scroll' },
+    { id: 'p5', name: 'Adesivo Vinil Brilho (m²)', category: 'COMUNICACAO_VISUAL', price: 60.00, icon: 'fa-note-sticky' },
+    { id: 'p6', name: 'Encadernação Espiral (Até 100 fls)', category: 'ACABAMENTO', price: 8.00, icon: 'fa-book' },
+    { id: 'p7', name: 'Plastificação Polaseal A4', category: 'ACABAMENTO', price: 6.00, icon: 'fa-layer-group' },
+    { id: 'p8', name: 'Cartão de Visita (1000 un)', category: 'PAPELARIA', price: 120.00, icon: 'fa-id-card' },
+    { id: 'p9', name: 'Panfletos 10x14cm (1000 un)', category: 'PAPELARIA', price: 180.00, icon: 'fa-paper-plane' },
+    { id: 'p10', name: 'Caneca Personalizada Porcelana', category: 'PAPELARIA', price: 35.00, icon: 'fa-mug-hot' }
+];
+
+// Produtos iniciais de Papelaria & Conveniência.
+// Se o catálogo já existir no navegador, estes itens são adicionados apenas quando ainda não houver
+// nenhum produto da respectiva área, sem apagar os produtos/preços já cadastrados.
+const convenienceSeed = [
+    { id: 'pap_01', name: 'Caderno Universitário', category: 'PAPELARIA', price: 18.90, icon: 'fa-book' },
+    { id: 'pap_02', name: 'Caneta Esferográfica Azul', category: 'PAPELARIA', price: 2.50, icon: 'fa-pen' },
+    { id: 'pap_03', name: 'Lápis Preto HB', category: 'PAPELARIA', price: 1.50, icon: 'fa-pencil' },
+    { id: 'pap_04', name: 'Borracha Branca', category: 'PAPELARIA', price: 2.00, icon: 'fa-eraser' },
+    { id: 'pap_05', name: 'Cola Branca 40g', category: 'PAPELARIA', price: 4.50, icon: 'fa-bottle-droplet' },
+    { id: 'pap_06', name: 'Papel Sulfite A4 500 folhas', category: 'PAPELARIA', price: 32.90, icon: 'fa-file-lines' },
+    { id: 'conv_01', name: 'Água Mineral 500ml', category: 'CONVENIENCIA', price: 3.00, icon: 'fa-bottle-water' },
+    { id: 'conv_02', name: 'Refrigerante Lata 350ml', category: 'CONVENIENCIA', price: 5.00, icon: 'fa-can-food' },
+    { id: 'conv_03', name: 'Café Expresso', category: 'CONVENIENCIA', price: 4.00, icon: 'fa-mug-hot' },
+    { id: 'conv_04', name: 'Biscoito Individual', category: 'CONVENIENCIA', price: 3.50, icon: 'fa-cookie-bite' },
+    { id: 'conv_05', name: 'Chiclete', category: 'CONVENIENCIA', price: 1.50, icon: 'fa-candy-cane' },
+    { id: 'conv_06', name: 'Chocolate Barra', category: 'CONVENIENCIA', price: 6.50, icon: 'fa-candy-cane' }
+];
+
+if (!catalog.some(p => p.category === 'PAPELARIA' && p.id.startsWith('pap_'))) {
+    catalog.push(...convenienceSeed.filter(p => p.category === 'PAPELARIA'));
+}
+if (!catalog.some(p => p.category === 'CONVENIENCIA')) {
+    catalog.push(...convenienceSeed.filter(p => p.category === 'CONVENIENCIA'));
+}
+
+// Customer Registry (managed exclusively by ADMIN)
+let customers = JSON.parse(localStorage.getItem('pdv_customers')) || [];
+
+// Cart State
+let cart = [];
+let selectedPayMethod = 'PIX';
+
+// Seed realistic mock sales if empty so the new Operator Breakdown feature is fully interactive
+let salesHistory = JSON.parse(localStorage.getItem('pdv_sales_history')) || generateSeedSales();
+// ================================================================
+// GESTÃO DE USUÁRIOS (EXCLUSIVO PARA A ÁREA ADMINISTRATIVA)
+// ================================================================
+
+// Renderiza a lista de usuários na tabela do Painel Admin
+function renderUsersTable() {
+    const tableBody = document.getElementById('users-table-body');
+    if (!tableBody) return;
+
+    const users = JSON.parse(localStorage.getItem('pdv_users')) || [];
+    const currentUser = JSON.parse(localStorage.getItem('pdv_current_user')) || {};
+
+    if (users.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="4" class="py-4 text-center text-slate-400 italic">Nenhum usuário cadastrado.</td>
+            </tr>`;
+        return;
+    }
+
+    tableBody.innerHTML = users.map(user => {
+        const isAdmin = user.role === 'ADMIN';
+        const isSelf = user.username === currentUser.username;
+
+        return `
+            <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 px-4 font-semibold text-slate-800">
+                    ${user.fullname || user.username}
+                    ${isSelf ? '<span class="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold">(Você)</span>' : ''}
+                </td>
+                <td class="py-3 px-4 font-mono text-slate-600">${user.username}</td>
+                <td class="py-3 px-4">
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isAdmin ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}">
+                        ${isAdmin ? 'ADMINISTRADOR' : 'OPERADOR'}
+                    </span>
+                </td>
+                <td class="py-3 px-4 text-right">
+                    ${isSelf ? `
+                        <span class="text-slate-400 text-[11px] italic">Conta ativa</span>
+                    ` : `
+                        <button onclick="deleteUser('${user.id || user.username}')" class="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-bold transition flex items-center gap-1 ml-auto">
+                            <i class="fa-solid fa-trash-can"></i> Remover
+                        </button>
+                    `}
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Abre o Modal de Adicionar Usuário
+function openAddUserModal() {
+    if (!requireAdmin()) return;
+    document.getElementById('add-user-modal').classList.remove('hidden');
+}
+
+// Fecha o Modal de Adicionar Usuário
+function closeAddUserModal() {
+    document.getElementById('add-user-modal').classList.add('hidden');
+    document.getElementById('admin-add-user-form').reset();
+}
+
+// Adiciona Usuário diretamente do Painel Admin
+function handleAddUserFromAdmin(event) {
+    event.preventDefault();
+    if (!requireAdmin()) return;
+
+    const fullname = document.getElementById('admin-reg-fullname').value.trim();
+    const username = document.getElementById('admin-reg-username').value.trim();
+    const password = document.getElementById('admin-reg-password').value;
+    const role = document.querySelector('input[name="admin-reg-role"]:checked').value;
+
+    let users = JSON.parse(localStorage.getItem('pdv_users')) || [];
+
+    // REGRA: Apenas 1 Administrador no sistema
+    if (role === 'ADMIN') {
+        const adminExists = users.some(u => u.role === 'ADMIN');
+        if (adminExists) {
+            showToast('Erro: Já existe um Administrador cadastrado no sistema.', 'error');
+            return;
+        }
+    }
+
+    // Verifica duplicação de nome de usuário
+    if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        showToast('Erro: Este nome de usuário já está em uso.', 'error');
+        return;
+    }
+
+    // Salva o novo usuário
+    const newUser = {
+        id: Date.now().toString(),
+        fullname,
+        username,
+        password,
+        role
+    };
+
+    users.push(newUser);
+    localStorage.setItem('pdv_users', JSON.stringify(users));
+
+    showToast(`Usuário "${username}" cadastrado com sucesso!`, 'success');
+    closeAddUserModal();
+    renderUsersTable();
+}
+
+// Remove um usuário do sistema
+function deleteUser(identifier) {
+    if (!requireAdmin()) return;
+    let users = JSON.parse(localStorage.getItem('pdv_users')) || [];
+    const targetUser = users.find(u => u.id === identifier || u.username === identifier);
+
+    if (!targetUser) {
+        showToast('Erro ao localizar usuário.', 'error');
+        return;
+    }
+
+    // Confirmação de exclusão
+    if (!confirm(`Tem certeza que deseja remover o usuário "${targetUser.fullname || targetUser.username}"?`)) {
+        return;
+    }
+
+    // Remove do array
+    users = users.filter(u => u.id !== identifier && u.username !== identifier);
+    localStorage.setItem('pdv_users', JSON.stringify(users));
+
+    showToast('Usuário removido com sucesso!', 'success');
+    renderUsersTable();
+}
+function generateSeedSales() {
+    const now = new Date();
+    const mockOperators = [
+        { username: 'joao', fullname: 'João Silva' },
+        { username: 'maria', fullname: 'Maria Santos' },
+        { username: 'carlos', fullname: 'Carlos Souza' }
+    ];
+
+    const seeded = [];
+    let counter = 1001;
+
+    // Helper to format date offset
+    function createDate(daysAgo, hours, minutes) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - daysAgo);
+        d.setHours(hours, minutes, 0, 0);
+        return d.toISOString();
+    }
+
+    // Seed sales across Today, This Week, This Month, This Year
+    const sampleSalesSpecs = [
+        // TODAY
+        { opIdx: 0, daysAgo: 0, hours: 9, items: [{ name: 'Impressão A4 P&B', qty: 50, price: 0.50 }, { name: 'Encadernação Espiral', qty: 1, price: 8.00 }], pay: 'PIX', customer: 'Lucas Rocha' },
+        { opIdx: 1, daysAgo: 0, hours: 10, items: [{ name: 'Banner Lona 440g (1.50m x 2.00m = 3.00 m²)', qty: 1, price: 135.00 }], pay: 'CARTAO_CREDITO', customer: 'Empresa ABC' },
+        { opIdx: 2, daysAgo: 0, hours: 11, items: [{ name: 'Cartão de Visita (1000 un)', qty: 1, price: 120.00 }], pay: 'DINHEIRO', customer: 'Marcos Vendas' },
+        { opIdx: 0, daysAgo: 0, hours: 14, items: [{ name: 'Impressão A4 Colorida', qty: 100, price: 1.50 }], pay: 'PIX', customer: 'Ana Clara' },
+        { opIdx: 1, daysAgo: 0, hours: 15, items: [{ name: 'Plastificação Polaseal A4', qty: 10, price: 6.00 }], pay: 'CARTAO_DEBITO', customer: 'Pedro Henrique' },
+
+        // THIS WEEK
+        { opIdx: 0, daysAgo: 2, hours: 11, items: [{ name: 'Caneca Personalizada Porcelana', qty: 4, price: 35.00 }], pay: 'PIX', customer: 'Juliana Paes' },
+        { opIdx: 1, daysAgo: 3, hours: 14, items: [{ name: 'Panfletos 10x14cm (1000 un)', qty: 2, price: 180.00 }], pay: 'CARTAO_CREDITO', customer: 'Restaurante Sabor' },
+        { opIdx: 2, daysAgo: 4, hours: 16, items: [{ name: 'Adesivo Vinil Brilho (2.00 m²)', qty: 1, price: 120.00 }], pay: 'PIX', customer: 'Loja Chic' },
+
+        // THIS MONTH
+        { opIdx: 0, daysAgo: 12, hours: 10, items: [{ name: 'Banner Lona 440g (4.00 m²)', qty: 1, price: 180.00 }], pay: 'CARTAO_CREDITO', customer: 'Evento Tech' },
+        { opIdx: 1, daysAgo: 18, hours: 13, items: [{ name: 'Impressão A4 P&B', qty: 500, price: 0.40 }], pay: 'PIX', customer: 'Escola Modelo' },
+        { opIdx: 2, daysAgo: 22, hours: 15, items: [{ name: 'Cartão de Visita (1000 un)', qty: 3, price: 110.00 }], pay: 'DINHEIRO', customer: 'Consultoria X' },
+
+        // THIS YEAR
+        { opIdx: 0, daysAgo: 60, hours: 9, items: [{ name: 'Impressão A3 Colorida', qty: 200, price: 3.50 }], pay: 'PIX', customer: 'Arquitetura Studio' },
+        { opIdx: 1, daysAgo: 100, hours: 11, items: [{ name: 'Banner Lona Backlight (10 m²)', qty: 1, price: 750.00 }], pay: 'CARTAO_CREDITO', customer: 'Shopping Center' }
+    ];
+
+    sampleSalesSpecs.forEach(s => {
+        const op = mockOperators[s.opIdx];
+        const subtotal = s.items.reduce((acc, i) => acc + (i.price * i.qty), 0);
+        seeded.push({
+            id: `#${counter++}`,
+            date: createDate(s.daysAgo, s.hours, 15),
+            operatorUsername: op.username,
+            operatorName: op.fullname,
+            customer: s.customer,
+            customerType: 'CONSUMIDOR',
+            customerId: null,
+            items: s.items,
+            subtotal: subtotal,
+            discount: 0,
+            total: subtotal,
+            payMethod: s.pay
+        });
+    });
+
+    localStorage.setItem('pdv_sales_history', JSON.stringify(seeded));
+    return seeded;
+}
+
+// App Initialization
+window.onload = function() {
+    lucide.createIcons();
+    checkAuth();
+    calculatePrintCost();
+    calculateBannerCost();
+    calculateFinishCost();
+};
+
+function saveState() {
+    localStorage.setItem('pdv_users', JSON.stringify(users));
+    localStorage.setItem('pdv_catalog', JSON.stringify(catalog));
+    localStorage.setItem('pdv_sales_history', JSON.stringify(salesHistory));
+    localStorage.setItem('pdv_customers', JSON.stringify(customers));
+}
+
+function checkAuth() {
+    if (!currentUser) {
+        document.getElementById('auth-section').classList.remove('hidden');
+        document.getElementById('main-header').classList.add('hidden');
+        document.getElementById('pos-section').classList.add('hidden');
+        document.getElementById('history-section').classList.add('hidden');
+        document.getElementById('admin-section').classList.add('hidden');
+    } else {
+        document.getElementById('auth-section').classList.add('hidden');
+        document.getElementById('main-header').classList.remove('hidden');
+        document.getElementById('current-user-display').innerText = currentUser.fullname;
+        
+        const rolePill = document.getElementById('header-role-pill');
+        const adminTab = document.getElementById('tab-admin');
+        
+        if (currentUser.role === 'ADMIN') {
+            rolePill.innerText = 'ADMIN';
+            rolePill.className = 'bg-amber-500 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase';
+            adminTab.classList.remove('hidden');
+        } else {
+            rolePill.innerText = 'OPERADOR';
+            rolePill.className = 'bg-indigo-700 text-indigo-100 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase';
+            adminTab.classList.add('hidden');
+        }
+
+        switchTab('pos');
+        renderCatalog();
+        renderCart();
+        renderSalesHistory();
+        renderAdminCatalog();
+        renderUsersList();
+        renderUsersTable();
+        renderAdminCustomers();
+        handleCartCustomerTypeChange();
+    }
+}
+
+function quickFill(u, p) {
+    document.getElementById('login-username').value = u;
+    document.getElementById('login-password').value = p;
+}
+
+// Substitua APENAS a sua função handleLogin por esta:
+function handleLogin(e) {
+    if (e) e.preventDefault();
+
+    // Captura os valores digitados no formulário
+    const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
+    const passwordInput = document.getElementById('login-password').value;
+
+    // Lista de usuários padrão (Admin e Operadores)
+    const defaultUsers = [
+        { name: 'Administrador', username: 'admin', password: '123', role: 'ADMIN' },
+        { name: 'João Silva', username: 'joao', password: '123', role: 'OPERATOR' },
+        { name: 'Maria Santos', username: 'maria', password: '123', role: 'OPERATOR' },
+        { name: 'Carlos Souza', username: 'carlos', password: '123', role: 'OPERATOR' }
+    ];
+
+    // Carrega os usuários salvos no sistema ou usa os padrões
+    const savedUsers = JSON.parse(localStorage.getItem('pdv_users')) || defaultUsers;
+
+    // Busca o usuário correspondente
+    const user = savedUsers.find(u => u.username.toLowerCase() === usernameInput && u.password === passwordInput);
+
+    if (!user) {
+        alert('Usuário ou senha inválidos!');
+        return;
+    }
+
+    // Grava a sessão do usuário logado
+    currentUser = user;
+    localStorage.setItem('pdv_current_user', JSON.stringify(user));
+
+    // Oculta a tela de autenticação e exibe o cabeçalho e o caixa
+    const authSec = document.getElementById('auth-section');
+    const mainHead = document.getElementById('main-header');
+    const posSec = document.getElementById('pos-section');
+
+    if (authSec) authSec.classList.add('hidden');
+    if (mainHead) mainHead.classList.remove('hidden');
+    if (posSec) posSec.classList.remove('hidden');
+
+    // Atualiza o nome do usuário no topo se o campo existir
+    const nameDisplay = document.getElementById('current-user-display');
+    if (nameDisplay) nameDisplay.innerText = user.name;
+
+    // Exibe/oculta abas exclusivas de admin se necessário
+    const adminTab = document.getElementById('tab-admin');
+    if (adminTab) {
+        if (user.role === 'ADMIN') {
+            adminTab.classList.remove('hidden');
+        } else {
+            adminTab.classList.add('hidden');
+        }
+    }
+}
+
+function handleLogout() {
+    currentUser = null;
+    localStorage.removeItem('pdv_current_user');
+    checkAuth();
+    showToast('Sessão encerrada.', 'info');
+}
+
+function showRegisterScreen() {
+    // Cadastro de usuários é exclusivo do Administrador.
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+        showToast('Somente o Administrador pode criar usuários.', 'error');
+        return;
+    }
+    openAddUserModal();
+}
+
+function showLoginScreen() {
+    document.getElementById('register-form').classList.add('hidden');
+    document.getElementById('login-form').classList.remove('hidden');
+}
+
+// Função para lidar com o cadastro de novos usuários
+function handleRegister(event) {
+    event.preventDefault();
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+        showToast('Acesso negado: somente o Administrador pode criar usuários.', 'error');
+        showLoginScreen();
+        return;
+    }
+
+    const fullname = document.getElementById('reg-fullname').value.trim();
+    const username = document.getElementById('reg-username').value.trim();
+    const password = document.getElementById('reg-password').value;
+    const role = document.querySelector('input[name="reg-role"]:checked').value;
+
+    // Recupera os usuários atuais do localStorage
+    let users = JSON.parse(localStorage.getItem('pdv_users')) || [];
+
+    // ================================================================
+    // NOVA REGRA: Bloqueia a criação se já existir um Administrador
+    // ================================================================
+    if (role === 'ADMIN') {
+        const adminAlreadyExists = users.some(user => user.role === 'ADMIN');
+        if (adminAlreadyExists) {
+            showToast('Acesso negado: Já existe uma conta de Administrador no sistema. Crie apenas contas de Operador.', 'error');
+            return; // Para a execução e impede o cadastro
+        }
+    }
+    // ================================================================
+
+    // Verifica se o nome de usuário (login) já existe
+    const userExists = users.some(user => user.username.toLowerCase() === username.toLowerCase());
+    if (userExists) {
+        showToast('Erro: Este usuário de login já está em uso.', 'error');
+        return;
+    }
+
+    // Adiciona o novo usuário
+    users.push({
+        id: Date.now().toString(),
+        fullname,
+        username,
+        password, // Em um sistema real, a senha deveria ser criptografada
+        role
+    });
+
+    // Salva no banco de dados local
+    localStorage.setItem('pdv_users', JSON.stringify(users));
+    
+    showToast('Conta criada com sucesso! Faça seu login.', 'success');
+    
+    // Reseta o formulário e volta para a tela de login
+    event.target.reset();
+    showLoginScreen();
+}
+
+function switchTab(tab) {
+    document.getElementById('pos-section').classList.add('hidden');
+    document.getElementById('history-section').classList.add('hidden');
+    document.getElementById('admin-section').classList.add('hidden');
+
+    document.getElementById('tab-pos').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50';
+    document.getElementById('tab-history').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50';
+    document.getElementById('tab-admin').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 text-indigo-200 hover:text-white hover:bg-indigo-800/50 hidden';
+
+    if (currentUser.role === 'ADMIN') {
+        document.getElementById('tab-admin').classList.remove('hidden');
+    }
+
+    if (tab === 'pos') {
+        document.getElementById('pos-section').classList.remove('hidden');
+        document.getElementById('tab-pos').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow';
+    } else if (tab === 'history') {
+        document.getElementById('history-section').classList.remove('hidden');
+        document.getElementById('tab-history').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow';
+        renderSalesHistory();
+    } else if (tab === 'admin' && currentUser.role === 'ADMIN') {
+        document.getElementById('admin-section').classList.remove('hidden');
+        document.getElementById('tab-admin').className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 bg-indigo-600 text-white shadow';
+        switchAdminSubTab('operator-sales');
+    }
+}
+
+// Calculator Toggles
+function toggleCalc(type) {
+    document.getElementById('calc-print-box').classList.add('hidden');
+    document.getElementById('calc-banner-box').classList.add('hidden');
+    document.getElementById('calc-finish-box').classList.add('hidden');
+
+    document.getElementById('btn-calc-print').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+    document.getElementById('btn-calc-banner').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+    document.getElementById('btn-calc-finish').className = 'px-3 py-1 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+
+    if (type === 'print') {
+        document.getElementById('calc-print-box').classList.remove('hidden');
+        document.getElementById('btn-calc-print').className = 'px-3 py-1 rounded-lg bg-indigo-600 text-white transition';
+    } else if (type === 'banner') {
+        document.getElementById('calc-banner-box').classList.remove('hidden');
+        document.getElementById('btn-calc-banner').className = 'px-3 py-1 rounded-lg bg-emerald-600 text-white transition';
+    } else if (type === 'finish') {
+        document.getElementById('calc-finish-box').classList.remove('hidden');
+        document.getElementById('btn-calc-finish').className = 'px-3 py-1 rounded-lg bg-purple-600 text-white transition';
+    }
+}
+
+function calculatePrintCost() {
+    const pages = parseInt(document.getElementById('calc-pages').value) || 1;
+    const copies = parseInt(document.getElementById('calc-copies').value) || 1;
+    const paper = document.getElementById('calc-paper').value;
+    const color = document.getElementById('calc-color').value;
+    const isDuplex = document.getElementById('calc-duplex').checked;
+
+    let totalImpressions = pages * copies;
+    document.getElementById('calc-total-impressions').innerText = totalImpressions;
+
+    let basePrice = 0.50; // A4 PB
+
+    if (paper.startsWith('A3')) basePrice += 0.80;
+    if (paper.includes('FOTO')) basePrice += 1.20;
+    if (paper.includes('COUCHE')) basePrice += 0.60;
+
+    if (color === 'COLOR') basePrice += 1.00;
+    if (color === 'COLOR_HIGH') basePrice += 2.00;
+
+    if (isDuplex) basePrice *= 0.85; // 15% discount for duplex
+
+    const total = totalImpressions * basePrice;
+    document.getElementById('calc-unit-price').innerText = basePrice.toFixed(2);
+    document.getElementById('calc-print-total').innerText = formatBRL(total);
+}
+
+function calculateBannerCost() {
+    const w = parseFloat(document.getElementById('calc-width').value) || 0.1;
+    const h = parseFloat(document.getElementById('calc-height').value) || 0.1;
+    const matPrice = parseFloat(document.getElementById('calc-material').value) || 45;
+    const hasIlhose = document.getElementById('calc-extra-ilhose').checked;
+    const hasBastao = document.getElementById('calc-extra-bastao').checked;
+
+    const area = w * h;
+    document.getElementById('calc-banner-area').innerText = area.toFixed(2) + ' m²';
+
+    let total = area * matPrice;
+    if (hasIlhose) total += 10;
+    if (hasBastao) total += 15;
+
+    document.getElementById('calc-banner-total').innerText = formatBRL(total);
+}
+
+function calculateFinishCost() {
+    const type = document.getElementById('calc-finish-type').value;
+    const qty = parseInt(document.getElementById('calc-finish-qty').value) || 1;
+
+    let unit = 8.00;
+    let label = 'Encadernação Espiral';
+
+    if (type === 'ENCADERNAÇÃO_ESPIRAL_GDE') { unit = 15.00; label = 'Encadernação Grande'; }
+    else if (type === 'PLASTIFICACAO_A4') { unit = 6.00; label = 'Plastificação A4'; }
+    else if (type === 'PLASTIFICACAO_A3') { unit = 12.00; label = 'Plastificação A3'; }
+    else if (type === 'CORTE_E_VINCO') { unit = 5.00; label = 'Refile / Corte'; }
+
+    const total = unit * qty;
+    document.getElementById('calc-finish-desc').innerText = `${label} (${qty}x)`;
+    document.getElementById('calc-finish-total').innerText = formatBRL(total);
+}
+
+// Add calculated products to cart
+function addCalculatedPrintToCart() {
+    const pages = document.getElementById('calc-pages').value;
+    const copies = document.getElementById('calc-copies').value;
+    const paperSelect = document.getElementById('calc-paper');
+    const paperName = paperSelect.options[paperSelect.selectedIndex].text;
+    const colorSelect = document.getElementById('calc-color');
+    const colorName = colorSelect.options[colorSelect.selectedIndex].text;
+    const totalImp = document.getElementById('calc-total-impressions').innerText;
+    const totalVal = parseBRL(document.getElementById('calc-print-total').innerText);
+
+    const title = `Impressão ${paperName} (${colorName}) - ${totalImp} pág(s)`;
+
+    cart.push({
+        id: 'c_' + Date.now(),
+        name: title,
+        qty: 1,
+        unitPrice: totalVal,
+        totalPrice: totalVal
+    });
+
+    renderCart();
+    showToast('Impressão adicionada ao carrinho!', 'success');
+}
+
+function addCalculatedBannerToCart() {
+    const w = document.getElementById('calc-width').value;
+    const h = document.getElementById('calc-height').value;
+    const area = document.getElementById('calc-banner-area').innerText;
+    const matSelect = document.getElementById('calc-material');
+    const matName = matSelect.options[matSelect.selectedIndex].text;
+    const totalVal = parseBRL(document.getElementById('calc-banner-total').innerText);
+
+    const title = `Banner/Plotter (${matName}) - ${w}m x ${h}m (${area})`;
+
+    cart.push({
+        id: 'c_' + Date.now(),
+        name: title,
+        qty: 1,
+        unitPrice: totalVal,
+        totalPrice: totalVal
+    });
+
+    renderCart();
+    showToast('Banner adicionado ao carrinho!', 'success');
+}
+
+function addCalculatedFinishToCart() {
+    const desc = document.getElementById('calc-finish-desc').innerText;
+    const totalVal = parseBRL(document.getElementById('calc-finish-total').innerText);
+
+    cart.push({
+        id: 'c_' + Date.now(),
+        name: `Acabamento: ${desc}`,
+        qty: 1,
+        unitPrice: totalVal,
+        totalPrice: totalVal
+    });
+
+    renderCart();
+    showToast('Acabamento adicionado ao carrinho!', 'success');
+}
+
+// Catalog & Cart Management
+let activeCategoryFilter = 'ALL';
+
+function renderCatalog() {
+    const grid = document.getElementById('catalog-grid');
+    const filterContainer = document.getElementById('catalog-category-filter');
+    const search = document.getElementById('catalog-search').value.toLowerCase();
+
+    // Render category pills
+    const categories = [
+        { id: 'ALL', name: 'Todos' },
+        { id: 'IMPRESSAO', name: 'Impressões' },
+        { id: 'COMUNICACAO_VISUAL', name: 'Com. Visual' },
+        { id: 'ACABAMENTO', name: 'Acabamentos' },
+        { id: 'PAPELARIA', name: 'Papelaria' },
+        { id: 'CONVENIENCIA', name: 'Conveniência' }
+    ];
+
+    filterContainer.innerHTML = categories.map(c => `
+        <button onclick="setCategoryFilter('${c.id}')" class="px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition ${activeCategoryFilter === c.id ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}">
+            ${c.name}
+        </button>
+    `).join('');
+
+    const filtered = catalog.filter(p => {
+        const matchesCat = activeCategoryFilter === 'ALL' || p.category === activeCategoryFilter;
+        const matchesSearch = p.name.toLowerCase().includes(search);
+        return matchesCat && matchesSearch;
+    });
+
+    grid.innerHTML = filtered.map(p => `
+        <div onclick="addCatalogItemToCart('${p.id}')" class="bg-slate-50 hover:bg-indigo-50/50 p-3 rounded-xl border border-slate-200 hover:border-indigo-300 transition cursor-pointer flex flex-col justify-between group shadow-sm">
+            <div>
+                <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-110 transition">
+                    <i class="fa-solid ${p.icon || 'fa-box'} text-sm"></i>
+                </div>
+                <h4 class="font-bold text-xs text-slate-800 line-clamp-2">${p.name}</h4>
+            </div>
+            <div class="mt-3 flex justify-between items-center">
+                <span class="font-black text-xs text-indigo-950">${formatBRL(p.price)}</span>
+                <span class="w-6 h-6 rounded-full bg-indigo-600 text-white text-xs flex items-center justify-center group-hover:bg-indigo-700">
+                    <i class="fa-solid fa-plus text-[10px]"></i>
+                </span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function setCategoryFilter(cat) {
+    activeCategoryFilter = cat;
+    renderCatalog();
+}
+
+function addCatalogItemToCart(id) {
+    const p = catalog.find(x => x.id === id);
+    if (!p) return;
+
+    const existing = cart.find(x => x.productId === id);
+    if (existing) {
+        existing.qty++;
+        existing.totalPrice = existing.qty * existing.unitPrice;
+    } else {
+        cart.push({
+            id: 'c_' + Date.now(),
+            productId: p.id,
+            name: p.name,
+            qty: 1,
+            unitPrice: p.price,
+            totalPrice: p.price
+        });
+    }
+
+    renderCart();
+    showToast(`${p.name} adicionado!`, 'success');
+}
+
+function renderCart() {
+    const list = document.getElementById('cart-items-list');
+    const checkoutBtn = document.getElementById('btn-checkout');
+
+    if (cart.length === 0) {
+        list.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                <i class="fa-solid fa-cart-arrow-down text-3xl mb-2 text-slate-300"></i>
+                <p class="text-xs font-semibold">Carrinho está vazio</p>
+                <p class="text-[10px]">Adicione itens do catálogo ou das calculadoras</p>
+            </div>
+        `;
+        checkoutBtn.disabled = true;
+        updateCartTotals();
+        return;
+    }
+
+    checkoutBtn.disabled = false;
+
+    list.innerHTML = cart.map((item, idx) => `
+        <div class="pt-2 pb-2 flex items-center justify-between text-xs gap-2">
+            <div class="flex-1 min-w-0">
+                <h5 class="font-bold text-slate-800 truncate">${item.name}</h5>
+                <p class="text-[10px] text-slate-500">${formatBRL(item.unitPrice)} un</p>
+            </div>
+            <div class="flex items-center gap-1.5 bg-slate-100 rounded-lg p-1">
+                <button onclick="updateCartQty(${idx}, -1)" class="w-5 h-5 bg-white text-slate-700 rounded shadow text-xs font-bold hover:bg-slate-200">-</button>
+                <span class="font-bold text-slate-800 w-4 text-center">${item.qty}</span>
+                <button onclick="updateCartQty(${idx}, 1)" class="w-5 h-5 bg-white text-slate-700 rounded shadow text-xs font-bold hover:bg-slate-200">+</button>
+            </div>
+            <div class="text-right min-w-[65px]">
+                <span class="font-black text-slate-900">${formatBRL(item.totalPrice)}</span>
+            </div>
+            <button onclick="removeCartItem(${idx})" class="text-slate-400 hover:text-rose-600 transition p-1">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+    `).join('');
+
+    updateCartTotals();
+}
+
+function updateCartQty(idx, delta) {
+    cart[idx].qty += delta;
+    if (cart[idx].qty <= 0) {
+        cart.splice(idx, 1);
+    } else {
+        cart[idx].totalPrice = cart[idx].qty * cart[idx].unitPrice;
+    }
+    renderCart();
+}
+
+function removeCartItem(idx) {
+    cart.splice(idx, 1);
+    renderCart();
+}
+
+function clearCart() {
+    cart = [];
+    document.getElementById('cart-customer-type').value = 'CONSUMIDOR';
+    document.getElementById('cart-customer-id').value = '';
+    document.getElementById('cart-customer-name').value = '';
+    document.getElementById('cart-customer-cpf').value = '';
+    document.getElementById('cart-discount-val').value = '0';
+    handleCartCustomerTypeChange();
+    renderCart();
+}
+
+function updateCartTotals() {
+    const subtotal = cart.reduce((acc, i) => acc + i.totalPrice, 0);
+    const discVal = parseFloat(document.getElementById('cart-discount-val').value) || 0;
+    const discType = document.getElementById('cart-discount-type').value;
+
+    let discount = 0;
+    if (discType === 'REAL') {
+        discount = discVal;
+    } else {
+        discount = (subtotal * discVal) / 100;
+    }
+
+    if (discount > subtotal) discount = subtotal;
+    const total = subtotal - discount;
+
+    document.getElementById('summary-subtotal').innerText = formatBRL(subtotal);
+    document.getElementById('summary-discount').innerText = `- ${formatBRL(discount)}`;
+    document.getElementById('summary-total').innerText = formatBRL(total);
+}
+
+// Payment Modal & Final Checkout
+function getCurrentCartCustomerType() {
+    return document.getElementById('cart-customer-type')?.value || 'CONSUMIDOR';
+}
+
+function getSelectedRegisteredCustomer() {
+    const id = document.getElementById('cart-customer-id')?.value;
+    return customers.find(c => c.id === id) || null;
+}
+
+function openPaymentModal() {
+    if (cart.length === 0) return;
+
+    const customerType = getCurrentCartCustomerType();
+    const customer = getSelectedRegisteredCustomer();
+
+    if (customerType !== 'CONSUMIDOR' && !customer) {
+        showToast('Selecione um cliente cadastrado para este tipo de comanda.', 'error');
+        return;
+    }
+
+    updateCartTotals();
+    const finalTotal = document.getElementById('summary-total').innerText;
+    const total = parseBRL(finalTotal);
+
+    if (customerType === 'MENSALISTA') {
+        if (customer.monthlyLimit > 0 && (customer.monthlyUsed || 0) + total > customer.monthlyLimit) {
+            showToast(`Limite mensal excedido. Disponível: ${formatBRL(customer.monthlyLimit - (customer.monthlyUsed || 0))}.`, 'error');
+            return;
+        }
+        document.getElementById('modal-pay-amount').innerText = finalTotal;
+        selectPayMethod('MENSALISTA');
+    } else if (customerType === 'CREDITO_ANTECIPADO') {
+        if ((customer.creditBalance || 0) < total) {
+            showToast(`Crédito insuficiente. Saldo atual: ${formatBRL(customer.creditBalance || 0)}.`, 'error');
+            return;
+        }
+        document.getElementById('modal-pay-amount').innerText = finalTotal;
+        selectPayMethod('CREDITO_ANTECIPADO');
+    } else {
+        document.getElementById('modal-pay-amount').innerText = finalTotal;
+        selectPayMethod('PIX');
+    }
+
+    document.getElementById('modal-payment').classList.remove('hidden');
+}
+
+function closePaymentModal() {
+    document.getElementById('modal-payment').classList.add('hidden');
+}
+
+function selectPayMethod(method) {
+    selectedPayMethod = method;
+    const methods = ['PIX', 'DINHEIRO', 'CARTAO_DEBITO', 'CARTAO_CREDITO', 'MENSALISTA', 'CREDITO_ANTECIPADO'];
+
+    methods.forEach(m => {
+        const btn = document.getElementById(`pay-btn-${m}`);
+        if (!btn) return;
+        if (m === method) {
+            btn.className = 'p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-indigo-600 bg-indigo-50 text-indigo-700';
+        } else {
+            btn.className = 'p-3 border rounded-xl text-center text-xs font-bold flex items-center justify-center gap-2 border-slate-200 text-slate-700 hover:bg-slate-50';
+        }
+    });
+
+    const customerType = getCurrentCartCustomerType();
+    const special = customerType === 'MENSALISTA' ? 'MENSALISTA' : customerType === 'CREDITO_ANTECIPADO' ? 'CREDITO_ANTECIPADO' : null;
+
+    ['PIX', 'DINHEIRO', 'CARTAO_DEBITO', 'CARTAO_CREDITO'].forEach(m => {
+        const btn = document.getElementById(`pay-btn-${m}`);
+        if (btn) btn.classList.toggle('hidden', !!special);
+    });
+    ['MENSALISTA', 'CREDITO_ANTECIPADO'].forEach(m => {
+        const btn = document.getElementById(`pay-btn-${m}`);
+        if (btn) btn.classList.toggle('hidden', special !== m);
+    });
+
+    const cashBox = document.getElementById('cash-change-box');
+    if (method === 'DINHEIRO') {
+        cashBox.classList.remove('hidden');
+        calcTroco();
+    } else {
+        cashBox.classList.add('hidden');
+    }
+}
+
+function calcTroco() {
+    const total = parseBRL(document.getElementById('modal-pay-amount').innerText);
+    const given = parseFloat(document.getElementById('cash-given-input').value) || 0;
+    const troco = given - total;
+    document.getElementById('cash-troco-display').innerText = formatBRL(troco > 0 ? troco : 0);
+}
+
+function confirmOrderCheckout() {
+    const subtotal = parseBRL(document.getElementById('summary-subtotal').innerText);
+    const discount = parseBRL(document.getElementById('summary-discount').innerText.replace('- ', ''));
+    const total = parseBRL(document.getElementById('summary-total').innerText);
+    const customerType = getCurrentCartCustomerType();
+    const registeredCustomer = getSelectedRegisteredCustomer();
+    const manualCustomer = document.getElementById('cart-customer-name').value.trim();
+    const customer = registeredCustomer ? registeredCustomer.name : (manualCustomer || 'Consumidor Final');
+
+    if (customerType !== 'CONSUMIDOR' && !registeredCustomer) {
+        showToast('Selecione um cliente cadastrado.', 'error');
+        return;
+    }
+
+    if (customerType === 'MENSALISTA') {
+        const used = registeredCustomer.monthlyUsed || 0;
+        if (registeredCustomer.monthlyLimit > 0 && used + total > registeredCustomer.monthlyLimit) {
+            showToast('O valor desta comanda ultrapassa o limite mensal do cliente.', 'error');
+            return;
+        }
+        registeredCustomer.monthlyUsed = used + total;
+        selectedPayMethod = 'MENSALISTA';
+    }
+
+    if (customerType === 'CREDITO_ANTECIPADO') {
+        const balance = registeredCustomer.creditBalance || 0;
+        if (balance < total) {
+            showToast(`Crédito insuficiente. Saldo atual: ${formatBRL(balance)}.`, 'error');
+            return;
+        }
+        registeredCustomer.creditBalance = balance - total;
+        selectedPayMethod = 'CREDITO_ANTECIPADO';
+    }
+
+    if (selectedPayMethod === 'DINHEIRO') {
+        const given = parseFloat(document.getElementById('cash-given-input').value) || 0;
+        if (given < total) {
+            showToast('O valor entregue é menor que o total da venda.', 'error');
+            return;
+        }
+    }
+
+    const order = {
+        id: `#${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toISOString(),
+        operatorUsername: currentUser.username,
+        operatorName: currentUser.fullname || currentUser.name,
+        customer: customer,
+        customerId: registeredCustomer ? registeredCustomer.id : null,
+        customerType: customerType,
+        items: JSON.parse(JSON.stringify(cart)),
+        subtotal: subtotal,
+        discount: discount,
+        total: total,
+        payMethod: selectedPayMethod
+    };
+
+    salesHistory.unshift(order);
+    saveState();
+
+    closePaymentModal();
+    showReceiptModal(order);
+    clearCart();
+    showToast('Venda concluída com sucesso!', 'success');
+}
+
+function showReceiptModal(order) {
+    document.getElementById('rec-id').innerText = order.id;
+    document.getElementById('rec-date').innerText = new Date(order.date).toLocaleString('pt-BR');
+    document.getElementById('rec-operator').innerText = order.operatorName;
+    const typeLabels = {
+        CONSUMIDOR: 'Consumidor Final',
+        MENSALISTA: 'Mensalista',
+        CREDITO_ANTECIPADO: 'Crédito Antecipado'
+    };
+    document.getElementById('rec-customer').innerText = `${order.customer} (${typeLabels[order.customerType] || 'Consumidor Final'})`;
+
+    const list = document.getElementById('rec-items-list');
+    list.innerHTML = order.items.map(i => `
+        <div class="flex justify-between">
+            <span>${i.qty}x ${i.name}</span>
+            <span>${formatBRL(i.totalPrice)}</span>
+        </div>
+    `).join('');
+
+    document.getElementById('rec-subtotal').innerText = formatBRL(order.subtotal);
+    document.getElementById('rec-discount').innerText = formatBRL(order.discount);
+    document.getElementById('rec-total').innerText = formatBRL(order.total);
+    document.getElementById('rec-paymethod').innerText = order.payMethod;
+
+    document.getElementById('modal-receipt').classList.remove('hidden');
+}
+
+function closeReceiptModal() {
+    document.getElementById('modal-receipt').classList.add('hidden');
+}
+
+// Sales History Table
+function renderSalesHistory() {
+    const tbody = document.getElementById('sales-history-tbody');
+    
+    let totalRev = 0;
+    let totalCount = salesHistory.length;
+    let payMethods = {};
+
+    salesHistory.forEach(s => {
+        totalRev += s.total;
+        payMethods[s.payMethod] = (payMethods[s.payMethod] || 0) + 1;
+    });
+
+    const avgTicket = totalCount > 0 ? totalRev / totalCount : 0;
+    let topMethod = '---';
+    let maxM = 0;
+    for (let m in payMethods) {
+        if (payMethods[m] > maxM) {
+            maxM = payMethods[m];
+            topMethod = m;
+        }
+    }
+
+    document.getElementById('kpi-total-sales').innerText = formatBRL(totalRev);
+    document.getElementById('kpi-count-sales').innerText = totalCount;
+    document.getElementById('kpi-avg-ticket').innerText = formatBRL(avgTicket);
+    document.getElementById('kpi-top-method').innerText = topMethod;
+
+    if (salesHistory.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Nenhuma venda registrada.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = salesHistory.map(s => `
+        <tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-3 font-bold text-slate-800">
+                ${s.id}<br>
+                <span class="text-[10px] text-slate-400 font-normal">${new Date(s.date).toLocaleString('pt-BR')}</span>
+            </td>
+            <td class="px-4 py-3 font-semibold text-slate-700">${s.operatorName}</td>
+            <td class="px-4 py-3 text-slate-600">${s.customer}</td>
+            <td class="px-4 py-3 text-slate-500 max-w-xs truncate">${s.items.map(i => `${i.qty}x ${i.name}`).join(', ')}</td>
+            <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">${s.payMethod}</span></td>
+            <td class="px-4 py-3 font-black text-slate-900">${formatBRL(s.total)}</td>
+            <td class="px-4 py-3 text-right">
+                <button onclick='reprintReceipt("${s.id}")' class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-xs" title="Reimprimir Comprovante">
+                    <i class="fa-solid fa-print"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function reprintReceipt(orderId) {
+    const found = salesHistory.find(x => x.id === orderId);
+    if (found) showReceiptModal(found);
+}
+
+// ADMIN SUBTABS & REQUESTED OPERATOR BREAKDOWN FEATURE
+let selectedOperatorPeriod = 'day'; // day, week, month, year
+let opChartInstance = null;
+let revTimelineChartInstance = null;
+let catShareChartInstance = null;
+
+function switchAdminSubTab(subtab) {
+    ['operator-sales', 'dashboard', 'catalog-manage', 'users-manage', 'customers-manage'].forEach(st => {
+        document.getElementById(`admin-subview-${st}`).classList.add('hidden');
+        document.getElementById(`admin-subtab-${st}`).className = 'px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2';
+    });
+
+    document.getElementById(`admin-subview-${subtab}`).classList.remove('hidden');
+    document.getElementById(`admin-subtab-${subtab}`).className = 'px-4 py-2 rounded-xl bg-indigo-600 text-white transition flex items-center gap-2';
+
+    if (subtab === 'operator-sales') {
+        renderOperatorSalesView();
+    } else if (subtab === 'dashboard') {
+        renderAdminDashboardCharts();
+    } else if (subtab === 'catalog-manage') {
+        renderAdminCatalog();
+    } else if (subtab === 'users-manage') {
+        renderUsersList();
+    } else if (subtab === 'customers-manage') {
+        renderAdminCustomers();
+    }
+}
+
+function setOperatorPeriodFilter(period) {
+    selectedOperatorPeriod = period;
+    ['day', 'week', 'month', 'year'].forEach(p => {
+        const btn = document.getElementById(`op-filter-${p}`);
+        if (p === period) {
+            btn.className = 'px-3 py-1.5 rounded-lg bg-white shadow text-indigo-600 font-bold transition';
+        } else {
+            btn.className = 'px-3 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 transition';
+        }
+    });
+
+    const labels = { day: 'Hoje (Dia)', week: 'Esta Semana', month: 'Este Mês', year: 'Este Ano' };
+    document.getElementById('op-table-period-badge').innerText = `Período: ${labels[period]}`;
+
+    renderOperatorSalesView();
+}
+
+function isDateInPeriod(dateString, period) {
+    const saleDate = new Date(dateString);
+    const now = new Date();
+
+    if (period === 'day') {
+        return saleDate.toDateString() === now.toDateString();
+    } else if (period === 'week') {
+        const oneWeekAgo = new Date(now);
+        oneWeekAgo.setDate(now.getDate() - 7);
+        return saleDate >= oneWeekAgo && saleDate <= now;
+    } else if (period === 'month') {
+        return saleDate.getMonth() === now.getMonth() && saleDate.getFullYear() === now.getFullYear();
+    } else if (period === 'year') {
+        return saleDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+}
+
+function renderOperatorSalesView() {
+    // 1. Filter sales by period
+    const periodSales = salesHistory.filter(s => isDateInPeriod(s.date, selectedOperatorPeriod));
+
+    // 2. Aggregate metrics per operator
+    const opMetrics = {};
+    users.forEach(u => {
+        opMetrics[u.username] = {
+            username: u.username,
+            fullname: u.fullname,
+            role: u.role,
+            totalRevenue: 0,
+            ordersCount: 0,
+            itemsSold: 0
+        };
+    });
+
+    periodSales.forEach(s => {
+        if (!opMetrics[s.operatorUsername]) {
+            opMetrics[s.operatorUsername] = {
+                username: s.operatorUsername,
+                fullname: s.operatorName,
+                role: 'OPERATOR',
+                totalRevenue: 0,
+                ordersCount: 0,
+                itemsSold: 0
+            };
+        }
+
+        opMetrics[s.operatorUsername].totalRevenue += s.total;
+        opMetrics[s.operatorUsername].ordersCount += 1;
+        const totalItemsInOrder = s.items.reduce((acc, i) => acc + i.qty, 0);
+        opMetrics[s.operatorUsername].itemsSold += totalItemsInOrder;
+    });
+
+    // 3. Render Summary Cards
+    const cardsContainer = document.getElementById('operator-summary-cards-container');
+    const activeOperators = Object.values(opMetrics);
+
+    cardsContainer.innerHTML = activeOperators.map(op => `
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl ${op.role === 'ADMIN' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-600'} flex items-center justify-center font-bold">
+                    <i class="fa-solid ${op.role === 'ADMIN' ? 'fa-user-shield' : 'fa-user'}"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-xs text-slate-800">${op.fullname}</h4>
+                    <span class="text-[10px] text-slate-400 font-semibold uppercase">${op.ordersCount} vendas (${op.itemsSold} itens)</span>
+                </div>
+            </div>
+            <div class="text-right">
+                <span class="text-xs font-bold uppercase text-slate-400 block">Total</span>
+                <span class="text-base font-black text-indigo-900">${formatBRL(op.totalRevenue)}</span>
+            </div>
+        </div>
+    `).join('');
+
+    // 4. Update Operator Select Dropdown for Detailed Table
+    const opSelect = document.getElementById('op-breakdown-select');
+    const currentVal = opSelect.value;
+    opSelect.innerHTML = `<option value="ALL">-- Todos os Operadores --</option>` + 
+        activeOperators.map(op => `<option value="${op.username}">${op.fullname}</option>`).join('');
+    if (activeOperators.some(o => o.username === currentVal)) opSelect.value = currentVal;
+
+    // 5. Render Comparison Chart.js
+    renderOperatorChart(activeOperators);
+
+    // 6. Render Detailed Table
+    renderOperatorDetailedTable();
+}
+
+function renderOperatorChart(opList) {
+    const ctx = document.getElementById('operatorComparisonChart').getContext('2d');
+    if (opChartInstance) opChartInstance.destroy();
+
+    const labels = opList.map(o => o.fullname);
+    const data = opList.map(o => o.totalRevenue);
+
+    opChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Faturamento Total (R$)',
+                data: data,
+                backgroundColor: '#4f46e5',
+                borderRadius: 8
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) { return 'R$ ' + value; }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function renderOperatorDetailedTable() {
+    const selectedOp = document.getElementById('op-breakdown-select').value;
+    const tbody = document.getElementById('operator-detailed-tbody');
+
+    const periodSales = salesHistory.filter(s => {
+        const matchesPeriod = isDateInPeriod(s.date, selectedOperatorPeriod);
+        const matchesOp = selectedOp === 'ALL' || s.operatorUsername === selectedOp;
+        return matchesPeriod && matchesOp;
+    });
+
+    if (periodSales.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">Nenhum item vendido por este operador no período selecionado.</td></tr>`;
+        return;
+    }
+
+    let rowsHTML = '';
+    periodSales.forEach(sale => {
+        sale.items.forEach(item => {
+            rowsHTML += `
+                <tr class="hover:bg-slate-50 transition">
+                    <td class="px-4 py-2.5 font-bold text-slate-800">${sale.operatorName}</td>
+                    <td class="px-4 py-2.5 text-[10px] text-slate-400 font-semibold">${new Date(sale.date).toLocaleString('pt-BR')}</td>
+                    <td class="px-4 py-2.5 font-medium text-slate-700">${item.name}</td>
+                    <td class="px-4 py-2.5 text-center font-bold text-slate-800">${item.qty}</td>
+                    <td class="px-4 py-2.5 text-slate-600">${formatBRL(item.unitPrice)}</td>
+                    <td class="px-4 py-2.5 font-black text-slate-900">${formatBRL(item.totalPrice)}</td>
+                    <td class="px-4 py-2.5 text-slate-500">${sale.customer}</td>
+                    <td class="px-4 py-2.5"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">${sale.payMethod}</span></td>
+                </tr>
+            `;
+        });
+    });
+
+    tbody.innerHTML = rowsHTML;
+}
+
+// Admin Dashboard Charts
+function renderAdminDashboardCharts() {
+    // 1. Revenue Timeline
+    const ctx1 = document.getElementById('revenueTimelineChart').getContext('2d');
+    if (revTimelineChartInstance) revTimelineChartInstance.destroy();
+
+    const last7Days = [];
+    const salesPerDay = [];
+
+    for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        last7Days.push(dateStr);
+
+        const totalDay = salesHistory.filter(s => new Date(s.date).toDateString() === d.toDateString())
+                                     .reduce((acc, s) => acc + s.total, 0);
+        salesPerDay.push(totalDay);
+    }
+
+    revTimelineChartInstance = new Chart(ctx1, {
+        type: 'line',
+        data: {
+            labels: last7Days,
+            datasets: [{
+                label: 'Faturamento (R$)',
+                data: salesPerDay,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    // 2. Category Share Chart
+    const ctx2 = document.getElementById('categoryShareChart').getContext('2d');
+    if (catShareChartInstance) catShareChartInstance.destroy();
+
+    catShareChartInstance = new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: ['Impressões', 'Comunicação Visual', 'Acabamentos', 'Papelaria'],
+            datasets: [{
+                data: [450, 680, 210, 340],
+                backgroundColor: ['#6366f1', '#10b981', '#a855f7', '#f59e0b']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+}
+
+// Catalog Admin Management
+function renderAdminCatalog() {
+    const tbody = document.getElementById('admin-catalog-tbody');
+    tbody.innerHTML = catalog.map(p => `
+        <tr class="hover:bg-slate-50 transition">
+            <td class="p-3 font-bold text-slate-800 flex items-center gap-2">
+                <i class="fa-solid ${p.icon || 'fa-box'} text-slate-400 text-xs"></i>
+                ${p.name}
+            </td>
+            <td class="p-3"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 uppercase">${p.category}</span></td>
+            <td class="p-3 font-black text-slate-900">${formatBRL(p.price)}</td>
+            <td class="p-3 text-right">
+                <button onclick="editProduct('${p.id}')" class="px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50 font-bold rounded">Editar</button>
+                <button onclick="deleteProduct('${p.id}')" class="px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 font-bold rounded">Excluir</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function openProductModal(prod = null) {
+    if (prod) {
+        document.getElementById('modal-prod-title').innerText = 'Editar Produto';
+        document.getElementById('prod-id').value = prod.id;
+        document.getElementById('prod-name').value = prod.name;
+        document.getElementById('prod-category').value = prod.category;
+        document.getElementById('prod-price').value = prod.price;
+    } else {
+        document.getElementById('modal-prod-title').innerText = 'Cadastrar Novo Produto';
+        document.getElementById('prod-id').value = '';
+        document.getElementById('prod-name').value = '';
+        document.getElementById('prod-category').value = 'IMPRESSAO';
+        document.getElementById('prod-price').value = '';
+    }
+    document.getElementById('modal-product').classList.remove('hidden');
+}
+
+function closeProductModal() {
+    document.getElementById('modal-product').classList.add('hidden');
+}
+
+function editProduct(id) {
+    const p = catalog.find(x => x.id === id);
+    if (p) openProductModal(p);
+}
+
+function deleteProduct(id) {
+    if (confirm('Tem certeza que deseja remover este produto?')) {
+        catalog = catalog.filter(x => x.id !== id);
+        saveState();
+        renderAdminCatalog();
+        renderCatalog();
+        showToast('Produto removido!', 'info');
+    }
+}
+
+function handleSaveProduct(e) {
+    e.preventDefault();
+    const id = document.getElementById('prod-id').value;
+    const name = document.getElementById('prod-name').value.trim();
+    const category = document.getElementById('prod-category').value;
+    const price = parseFloat(document.getElementById('prod-price').value) || 0;
+
+    if (id) {
+        const p = catalog.find(x => x.id === id);
+        if (p) { p.name = name; p.category = category; p.price = price; }
+    } else {
+        catalog.push({
+            id: 'p_' + Date.now(),
+            name: name,
+            category: category,
+            price: price,
+            icon: 'fa-box'
+        });
+    }
+
+    saveState();
+    closeProductModal();
+    renderAdminCatalog();
+    renderCatalog();
+    showToast('Produto salvo com sucesso!', 'success');
+}
+
+// System Users Management
+function renderUsersList() {
+    const ul = document.getElementById('users-list-ul');
+    ul.innerHTML = users.map(u => `
+        <li class="py-3 flex justify-between items-center text-xs">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg ${u.role === 'ADMIN' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-600'} flex items-center justify-center font-bold">
+                    <i class="fa-solid ${u.role === 'ADMIN' ? 'fa-user-shield' : 'fa-user'}"></i>
+                </div>
+                <div>
+                    <h5 class="font-bold text-slate-800">${u.fullname}</h5>
+                    <p class="text-[10px] text-slate-400">@${u.username}</p>
+                </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold ${u.role === 'ADMIN' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-700'}">${u.role}</span>
+        </li>
+    `).join('');
+}
+
+// ================================================================
+// GESTÃO DE CLIENTES (EXCLUSIVO PARA ADMIN)
+// ================================================================
+
+function requireAdmin() {
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+        showToast('Acesso permitido somente ao Administrador.', 'error');
+        return false;
+    }
+    return true;
+}
+
+function toggleCustomerFinancialFields() {
+    const type = document.getElementById('customer-type')?.value;
+    const monthlyBox = document.getElementById('customer-monthly-limit-box');
+    const creditBox = document.getElementById('customer-credit-box');
+    if (!monthlyBox || !creditBox) return;
+    monthlyBox.classList.toggle('hidden', type !== 'MENSALISTA');
+    creditBox.classList.toggle('hidden', type !== 'CREDITO_ANTECIPADO');
+}
+
+function openCustomerModal(customer = null) {
+    if (!requireAdmin()) return;
+
+    document.getElementById('customer-form').reset();
+    document.getElementById('modal-customer-title').innerText = customer ? 'Editar Cliente' : 'Cadastrar Cliente';
+    document.getElementById('customer-id').value = customer?.id || '';
+    document.getElementById('customer-name').value = customer?.name || '';
+    document.getElementById('customer-cpf').value = customer?.cpf || '';
+    document.getElementById('customer-phone').value = customer?.phone || '';
+    document.getElementById('customer-type').value = customer?.type || 'MENSALISTA';
+    document.getElementById('customer-monthly-limit').value = customer?.monthlyLimit || 0;
+    document.getElementById('customer-credit-balance').value = customer?.creditBalance || 0;
+    toggleCustomerFinancialFields();
+    document.getElementById('modal-customer').classList.remove('hidden');
+}
+
+function closeCustomerModal() {
+    document.getElementById('modal-customer').classList.add('hidden');
+}
+
+function handleSaveCustomer(event) {
+    event.preventDefault();
+    if (!requireAdmin()) return;
+
+    const id = document.getElementById('customer-id').value;
+    const name = document.getElementById('customer-name').value.trim();
+    const cpf = document.getElementById('customer-cpf').value.trim();
+    const phone = document.getElementById('customer-phone').value.trim();
+    const type = document.getElementById('customer-type').value;
+    const monthlyLimit = parseFloat(document.getElementById('customer-monthly-limit').value) || 0;
+    const creditInitial = parseFloat(document.getElementById('customer-credit-balance').value) || 0;
+
+    if (!name) {
+        showToast('Informe o nome do cliente.', 'error');
+        return;
+    }
+
+    if (cpf && customers.some(c => c.cpf && c.cpf === cpf && c.id !== id)) {
+        showToast('Já existe um cliente cadastrado com este CPF/CNPJ.', 'error');
+        return;
+    }
+
+    if (id) {
+        const c = customers.find(x => x.id === id);
+        if (!c) return;
+        c.name = name;
+        c.cpf = cpf;
+        c.phone = phone;
+        c.type = type;
+        c.monthlyLimit = type === 'MENSALISTA' ? monthlyLimit : 0;
+        if (type === 'CREDITO_ANTECIPADO') {
+            c.creditBalance = creditInitial;
+        }
+    } else {
+        customers.push({
+            id: 'cli_' + Date.now(),
+            name,
+            cpf,
+            phone,
+            type,
+            monthlyLimit: type === 'MENSALISTA' ? monthlyLimit : 0,
+            monthlyUsed: 0,
+            creditBalance: type === 'CREDITO_ANTECIPADO' ? creditInitial : 0,
+            active: true,
+            createdAt: new Date().toISOString()
+        });
+    }
+
+    saveState();
+    closeCustomerModal();
+    renderAdminCustomers();
+    handleCartCustomerTypeChange();
+    showToast('Cliente salvo com sucesso!', 'success');
+}
+
+function resetMonthlyUsageIfNeeded() {
+    const monthKey = new Date().toISOString().slice(0, 7);
+    let changed = false;
+    customers.forEach(c => {
+        if (c.type !== 'MENSALISTA') return;
+        if (c.monthlyUsageMonth !== monthKey) {
+            c.monthlyUsageMonth = monthKey;
+            c.monthlyUsed = 0;
+            changed = true;
+        }
+    });
+    if (changed) saveState();
+}
+
+function renderAdminCustomers() {
+    resetMonthlyUsageIfNeeded();
+    const tbody = document.getElementById('admin-customers-tbody');
+    if (!tbody) return;
+
+    if (!currentUser || currentUser.role !== 'ADMIN') {
+        tbody.innerHTML = '';
+        return;
+    }
+
+    if (customers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400 italic">Nenhum cliente mensalista ou com crédito antecipado cadastrado.</td></tr>`;
+        return;
+    }
+
+    const labels = { MENSALISTA: 'MENSALISTA', CREDITO_ANTECIPADO: 'CRÉDITO ANTECIPADO' };
+
+    tbody.innerHTML = customers.map(c => {
+        const balance = c.type === 'CREDITO_ANTECIPADO'
+            ? `Saldo: ${formatBRL(c.creditBalance || 0)}`
+            : `Usado: ${formatBRL(c.monthlyUsed || 0)} / ${c.monthlyLimit > 0 ? formatBRL(c.monthlyLimit) : 'Sem limite'}`;
+
+        return `
+            <tr class="hover:bg-slate-50 transition">
+                <td class="p-3">
+                    <div class="font-bold text-slate-800">${c.name}</div>
+                    <div class="text-[10px] text-slate-400">${c.phone || 'Sem telefone'}</div>
+                </td>
+                <td class="p-3">${c.cpf || '—'}</td>
+                <td class="p-3">
+                    <span class="px-2 py-1 rounded-full text-[10px] font-bold ${c.type === 'MENSALISTA' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}">
+                        ${labels[c.type]}
+                    </span>
+                </td>
+                <td class="p-3 font-bold text-slate-800">${balance}</td>
+                <td class="p-3 text-right whitespace-nowrap">
+                    ${c.type === 'CREDITO_ANTECIPADO' ? `<button onclick="addCustomerCredit('${c.id}')" class="px-2 py-1 text-emerald-700 hover:bg-emerald-50 rounded font-bold">Adicionar crédito</button>` : ''}
+                    <button onclick="openCustomerModal(customers.find(c => c.id === '${c.id}'))" class="px-2 py-1 text-indigo-600 hover:bg-indigo-50 rounded font-bold">Editar</button>
+                    <button onclick="deleteCustomer('${c.id}')" class="px-2 py-1 text-rose-600 hover:bg-rose-50 rounded font-bold">Excluir</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function addCustomerCredit(id) {
+    if (!requireAdmin()) return;
+    const c = customers.find(x => x.id === id);
+    if (!c || c.type !== 'CREDITO_ANTECIPADO') return;
+
+    const value = parseFloat(prompt(`Valor de crédito para ${c.name}:`, '0')) || 0;
+    if (value <= 0) return;
+
+    c.creditBalance = (c.creditBalance || 0) + value;
+    saveState();
+    renderAdminCustomers();
+    handleCartCustomerTypeChange();
+    showToast(`Crédito adicionado. Novo saldo: ${formatBRL(c.creditBalance)}.`, 'success');
+}
+
+function deleteCustomer(id) {
+    if (!requireAdmin()) return;
+    const c = customers.find(x => x.id === id);
+    if (!c) return;
+
+    if (!confirm(`Excluir o cliente "${c.name}"? O histórico de vendas será preservado.`)) return;
+
+    customers = customers.filter(x => x.id !== id);
+    saveState();
+    renderAdminCustomers();
+    handleCartCustomerTypeChange();
+    showToast('Cliente excluído.', 'success');
+}
+
+function handleCartCustomerTypeChange() {
+    const typeEl = document.getElementById('cart-customer-type');
+    const box = document.getElementById('registered-customer-box');
+    const select = document.getElementById('cart-customer-id');
+    const nameInput = document.getElementById('cart-customer-name');
+    const cpfInput = document.getElementById('cart-customer-cpf');
+    const creditInfo = document.getElementById('customer-credit-info');
+
+    if (!typeEl || !box || !select) return;
+
+    const type = typeEl.value;
+    const isRegistered = type !== 'CONSUMIDOR';
+
+    box.classList.toggle('hidden', !isRegistered);
+    nameInput.readOnly = isRegistered;
+    cpfInput.readOnly = isRegistered;
+
+    if (!isRegistered) {
+        nameInput.classList.remove('bg-slate-100');
+        cpfInput.classList.remove('bg-slate-100');
+        select.innerHTML = '<option value="">Selecione o cliente...</option>';
+        creditInfo.classList.add('hidden');
+        select.value = '';
+        return;
+    }
+
+    nameInput.classList.add('bg-slate-100');
+    cpfInput.classList.add('bg-slate-100');
+
+    const available = customers.filter(c => c.active !== false && c.type === type);
+    select.innerHTML = `<option value="">Selecione o cliente...</option>` + available.map(c =>
+        `<option value="${c.id}">${c.name}${c.cpf ? ' — ' + c.cpf : ''}</option>`
+    ).join('');
+
+    creditInfo.classList.add('hidden');
+    nameInput.value = '';
+    cpfInput.value = '';
+}
+
+function selectRegisteredCustomer() {
+    const customer = getSelectedRegisteredCustomer();
+    const type = getCurrentCartCustomerType();
+    const nameInput = document.getElementById('cart-customer-name');
+    const cpfInput = document.getElementById('cart-customer-cpf');
+    const info = document.getElementById('customer-credit-info');
+
+    if (!customer) {
+        nameInput.value = '';
+        cpfInput.value = '';
+        info.classList.add('hidden');
+        return;
+    }
+
+    nameInput.value = customer.name || '';
+    cpfInput.value = customer.cpf || '';
+
+    if (type === 'CREDITO_ANTECIPADO') {
+        info.innerText = `Crédito disponível: ${formatBRL(customer.creditBalance || 0)}`;
+        info.classList.remove('hidden');
+    } else if (type === 'MENSALISTA') {
+        const used = customer.monthlyUsed || 0;
+        const available = customer.monthlyLimit > 0 ? Math.max(customer.monthlyLimit - used, 0) : null;
+        info.innerText = available === null
+            ? `Consumo do mês: ${formatBRL(used)} • Sem limite mensal`
+            : `Consumo do mês: ${formatBRL(used)} • Disponível: ${formatBRL(available)}`;
+        info.classList.remove('hidden');
+    } else {
+        info.classList.add('hidden');
+    }
+}
+
+// Utility Helpers & Formatting
+function formatBRL(val) {
+    return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function parseBRL(str) {
+    if (!str) return 0;
+    return parseFloat(str.replace('R$', '').replace(/\./g, '').replace(',', '.').trim()) || 0;
+}
+
+function showToast(msg, type = 'info') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+
+    const bgMap = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        info: 'bg-slate-900 text-white'
+    };
+
+    toast.className = `px-4 py-2.5 rounded-xl text-xs font-bold shadow-xl flex items-center gap-2 pointer-events-auto transition-all transform duration-300 ${bgMap[type] || bgMap.info}`;
+    toast.innerHTML = `<i class="fa-solid ${type === 'success' ? 'fa-circle-check' : 'fa-circle-info'}"></i> <span>${msg}</span>`;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// =========================
+// PWA: instalação e atualizações
+// =========================
+const PWA_APP_VERSION = '1.1.0';
+let deferredInstallPrompt = null;
+let pwaWaitingWorker = null;
+
+function showPwaBar(mode) {
+    const bar = document.getElementById('pwa-install-update-bar');
+    const title = document.getElementById('pwa-bar-title');
+    const message = document.getElementById('pwa-bar-message');
+    const installBtn = document.getElementById('pwa-install-btn');
+    const updateBtn = document.getElementById('pwa-update-btn');
+    if (!bar) return;
+
+    if (mode === 'install') {
+        title.textContent = 'Instalar aplicativo';
+        message.textContent = 'Instale o PDV no dispositivo para abrir como aplicativo, sem depender da aba do navegador.';
+        installBtn.classList.remove('hidden');
+        updateBtn.classList.add('hidden');
+        bar.classList.remove('hidden');
+    } else if (mode === 'update') {
+        title.textContent = 'Atualização disponível';
+        message.textContent = 'Uma nova versão do PDV está disponível. Atualize para aplicar as correções e melhorias.';
+        installBtn.classList.add('hidden');
+        updateBtn.classList.remove('hidden');
+        bar.classList.remove('hidden');
+    }
+}
+
+function hidePwaBar() {
+    const bar = document.getElementById('pwa-install-update-bar');
+    if (bar) bar.classList.add('hidden');
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    if (!window.matchMedia('(display-mode: standalone)').matches) showPwaBar('install');
+});
+
+window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    hidePwaBar();
+    if (typeof showToast === 'function') showToast('Aplicativo instalado com sucesso!', 'success');
+});
+
+async function installPWA() {
+    if (!deferredInstallPrompt) {
+        if (typeof showToast === 'function') showToast('Use o menu do navegador e escolha “Instalar aplicativo”.', 'info');
+        return;
+    }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    hidePwaBar();
+}
+
+function applyPwaUpdate() {
+    if (pwaWaitingWorker) {
+        pwaWaitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+        window.location.reload();
+    }
+}
+
+async function registerPWA() {
+    // Service Workers/PWA não funcionam quando o HTML é aberto via file://
+    if (location.protocol === 'file:') {
+        const warning = document.getElementById('pwa-file-warning');
+        if (warning) warning.classList.remove('hidden');
+        console.warn('PDV PWA: abra o sistema pelo INICIAR_PDV.bat para usar instalação e atualizações.');
+        return;
+    }
+
+    if (!('serviceWorker' in navigator)) return;
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        return; // Service Worker não funciona em arquivo local (file://).
+    }
+
+    try {
+        const registration = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' });
+
+        const checkForUpdate = () => registration.update().catch(() => {});
+        checkForUpdate();
+        setInterval(checkForUpdate, 60 * 60 * 1000); // verifica a cada 1 hora
+
+        if (registration.waiting) {
+            pwaWaitingWorker = registration.waiting;
+            showPwaBar('update');
+        }
+
+        registration.addEventListener('updatefound', () => {
+            const worker = registration.installing;
+            if (!worker) return;
+            worker.addEventListener('statechange', () => {
+                if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+                    pwaWaitingWorker = worker;
+                    showPwaBar('update');
+                }
+            });
+        });
+
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            // Evita loop: só recarrega quando o novo Service Worker assumir o controle.
+            if (window.__pwaReloading) return;
+            window.__pwaReloading = true;
+            window.location.reload();
+        });
+    } catch (error) {
+        console.warn('Não foi possível registrar o PWA:', error);
+    }
+}
+
+window.addEventListener('load', registerPWA);
+
+</script>
+
+<!-- Aviso quando o PDV é aberto diretamente como arquivo local -->
+<div id="pwa-file-warning" class="fixed bottom-4 left-4 right-4 z-[9999] hidden">
+  <div class="mx-auto max-w-2xl rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 shadow-2xl">
+    <div class="flex items-start gap-3">
+      <div class="text-amber-600 text-xl"><i class="fas fa-circle-info"></i></div>
+      <div class="flex-1">
+        <div class="font-bold text-amber-900">Modo local detectado</div>
+        <div class="mt-1 text-sm text-amber-800">
+          O navegador não pode instalar este PDV quando o HTML é aberto diretamente.
+          Feche esta janela e abra o arquivo <b>INICIAR_PDV.bat</b> da pasta do sistema.
+          O PDV será aberto em localhost e a opção <b>Instalar aplicativo</b> ficará disponível.
+        </div>
+      </div>
+      <button type="button" onclick="document.getElementById('pwa-file-warning').remove()"
+              class="text-amber-700 hover:text-amber-900 text-lg" title="Fechar">×</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Status da conexão com o banco online -->
+<div id="cloud-status" class="fixed bottom-4 left-4 z-[9998] hidden">
+  <button onclick="PDVCloud?.showStatus?.()" class="px-3 py-2 rounded-xl bg-slate-900 text-white text-[11px] font-bold shadow-xl flex items-center gap-2">
+    <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+    <span id="cloud-status-text">Banco local</span>
+  </button>
+</div>
+
+</body>
+</html>
