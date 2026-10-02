@@ -34,12 +34,17 @@
     if (!client) throw new Error('Cliente Supabase não inicializado');
     const {data:{user},error:authError}=await client.auth.getUser(); fail(authError,'Autenticação');
     if (!user) throw new Error('Sessão não autenticada');
-    const [pr,cr,sr]=await Promise.all([
+    const [pr,cr,sr,ur]=await Promise.all([
       client.from('products').select('*').eq('active',true),
       client.from('customers').select('*').eq('active',true),
-      client.from('sales').select('*').order('sale_date',{ascending:false}).limit(2000)
+      client.from('sales').select('*').order('sale_date',{ascending:false}).limit(2000),
+      client.from('profiles').select('id,full_name,username,email,role,active,created_at').eq('active',true).order('created_at',{ascending:true})
     ]);
-    fail(pr.error,'Leitura de produtos'); fail(cr.error,'Leitura de clientes'); fail(sr.error,'Leitura de vendas');
+    fail(pr.error,'Leitura de produtos'); fail(cr.error,'Leitura de clientes'); fail(sr.error,'Leitura de vendas'); fail(ur.error,'Leitura de usuários');
+    if (ur.data && typeof users!=='undefined') {
+      users=ur.data.map(u=>({id:u.id,fullname:u.full_name,username:u.username||'',role:u.role,email:u.email||''}));
+      localStorage.setItem('pdv_users',JSON.stringify(users));
+    }
     if (pr.data?.length && typeof catalog!=='undefined') { catalog=pr.data.map(productFromDb); localStorage.setItem('pdv_catalog',JSON.stringify(catalog)); }
     if (cr.data?.length && typeof customers!=='undefined') { customers=cr.data.map(customerFromDb); localStorage.setItem('pdv_customers',JSON.stringify(customers)); }
     if (sr.data?.length && typeof salesHistory!=='undefined') {
