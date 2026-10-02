@@ -666,8 +666,12 @@
                     <input type="text" id="admin-reg-fullname" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
                 </div>
                 <div>
-                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário para Login</label>
-                    <input type="text" id="admin-reg-username" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário / identificação</label>
+                    <input type="text" id="admin-reg-username" required maxlength="60" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">E-mail para login</label>
+                    <input type="email" id="admin-reg-email" required autocomplete="email" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-indigo-500" placeholder="operador@exemplo.com">
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Senha</label>
@@ -1216,7 +1220,7 @@
                         ${user.fullname || user.username}
                         ${isSelf ? '<span class="ml-1 text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-bold">(Você)</span>' : ''}
                     </td>
-                    <td class="py-3 px-4 font-mono text-slate-600">${user.username}</td>
+                    <td class="py-3 px-4 font-mono text-slate-600">${user.username}<span class="block text-[10px] text-slate-400 font-sans">${user.email || ''}</span></td>
                     <td class="py-3 px-4">
                         <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${isAdmin ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-slate-100 text-slate-700 border border-slate-200'}">
                             ${isAdmin ? 'ADMINISTRADOR' : 'OPERADOR'}
@@ -1248,48 +1252,47 @@
         document.getElementById('admin-add-user-form').reset();
     }
 
-    // Adiciona Usuário diretamente do Painel Admin
-    function handleAddUserFromAdmin(event) {
+    // Cria usuários no Supabase Auth através de uma Edge Function segura.
+    async function handleAddUserFromAdmin(event) {
         event.preventDefault();
         if (!requireAdmin()) return;
-
         const fullname = document.getElementById('admin-reg-fullname').value.trim();
         const username = document.getElementById('admin-reg-username').value.trim();
+        const email = document.getElementById('admin-reg-email').value.trim().toLowerCase();
         const password = document.getElementById('admin-reg-password').value;
         const role = document.querySelector('input[name="admin-reg-role"]:checked').value;
-
-        let users = JSON.parse(localStorage.getItem('pdv_users')) || [];
-
-        // REGRA: Apenas 1 Administrador no sistema
-        if (role === 'ADMIN') {
-            const adminExists = users.some(u => u.role === 'ADMIN');
-            if (adminExists) {
-                showToast('Erro: Já existe um Administrador cadastrado no sistema.', 'error');
-                return;
+        const submit = document.querySelector('#admin-add-user-form button[type="submit"]');
+        if (!fullname || !username || !email || password.length < 8) {
+            showToast('Preencha todos os campos. A senha deve ter pelo menos 8 caracteres.', 'error'); return;
+        }
+        if (!window.PDVCloud?.client || !PDVCloud.ready) {
+            showToast('Conecte-se ao Supabase como administrador antes de criar usuários.', 'error'); return;
+        }
+        if (submit) { submit.disabled = true; submit.textContent = 'Cadastrando...'; }
+        try {
+            const { data, error } = await PDVCloud.client.functions.invoke('admin-create-user', {
+                body: { full_name: fullname, username, email, password, role }
+            });
+            if (error) {
+                let detail = error.message || 'Falha ao criar conta';
+                try { const ctx = await error.context?.json?.(); if (ctx?.error) detail = ctx.error; } catch (_) {}
+                throw new Error(detail);
             }
+            if (!data?.profile) throw new Error(data?.error || 'A função não retornou o perfil do usuário.');
+            const known = JSON.parse(localStorage.getItem('pdv_users') || '[]').filter(u => u.id !== data.profile.id);
+            known.push({ id:data.profile.id, fullname:data.profile.full_name, username:data.profile.username, role:data.profile.role, email });
+            localStorage.setItem('pdv_users', JSON.stringify(known));
+            users = known;
+            showToast(`Usuário "${username}" cadastrado no banco com sucesso.`, 'success');
+            closeAddUserModal();
+            renderUsersTable();
+            if (typeof renderUsersList === 'function') renderUsersList();
+        } catch (err) {
+            console.error('Falha ao cadastrar usuário:', err);
+            showToast('Não foi possível cadastrar: ' + (err.message || 'erro desconhecido'), 'error');
+        } finally {
+            if (submit) { submit.disabled = false; submit.textContent = 'Cadastrar'; }
         }
-
-        // Verifica duplicação de nome de usuário
-        if (users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
-            showToast('Erro: Este nome de usuário já está em uso.', 'error');
-            return;
-        }
-
-        // Salva o novo usuário
-        const newUser = {
-            id: Date.now().toString(),
-            fullname,
-            username,
-            password,
-            role
-        };
-
-        users.push(newUser);
-        localStorage.setItem('pdv_users', JSON.stringify(users));
-
-        showToast(`Usuário "${username}" cadastrado com sucesso!`, 'success');
-        closeAddUserModal();
-        renderUsersTable();
     }
 
     // Remove um usuário do sistema
