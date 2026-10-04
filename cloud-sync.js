@@ -22,6 +22,7 @@
       const {data,error}=await client.auth.getSession(); fail(error,'Sessão');
       cloudReady=!!data.session;
       setStatus(cloudReady?'Sessão Supabase ativa':'Banco configurado • faça login',cloudReady?'online':'local');
+      if (cloudReady) { try { await loadCalcPrices(); } catch (e) { console.warn('Não foi possível carregar preços das calculadoras:',e); } }
       return cloudReady;
     } catch(e) { console.error('PDV Cloud init',e); setStatus('Erro de conexão Supabase','error'); return false; }
   }
@@ -29,22 +30,50 @@
   const productFromDb = p => ({id:p.id,name:p.name,category:p.category,price:Number(p.price)||0,icon:p.icon||'fa-box',stock:p.stock==null?undefined:Number(p.stock),controlsStock:!!p.controls_stock,active:p.active!==false});
   const customerToDb = c => ({id:String(c.id),name:String(c.name||''),cpf:c.cpf||null,phone:c.phone||null,type:c.type,monthly_limit:Number(c.monthlyLimit)||0,monthly_used:Number(c.monthlyUsed)||0,monthly_usage_month:c.monthlyUsageMonth||null,credit_balance:Number(c.creditBalance)||0,active:c.active!==false,updated_at:new Date().toISOString()});
   const customerFromDb = c => ({id:c.id,name:c.name,cpf:c.cpf||'',phone:c.phone||'',type:c.type,monthlyLimit:Number(c.monthly_limit)||0,monthlyUsed:Number(c.monthly_used)||0,monthlyUsageMonth:c.monthly_usage_month||null,creditBalance:Number(c.credit_balance)||0,active:c.active!==false,createdAt:c.created_at});
+  // Preços centrais das calculadoras: um único registro compartilhado no Supabase.
+  async function loadCalcPrices() {
+    if (!client) await init();
+    if (!client || !cloudReady) return null;
+    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação dos preços');
+    if (!user) return null;
+    const {data,error}=await client.from('calculator_prices').select('prices').eq('id','default').maybeSingle();
+    fail(error,'Leitura dos preços das calculadoras');
+    if (data?.prices && typeof data.prices==='object' && typeof calcPrices!=='undefined') {
+      calcPrices={...DEFAULT_CALC_PRICES,...data.prices};
+      localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));
+      if (typeof renderCalcPricesAdmin==='function') renderCalcPricesAdmin();
+      if (typeof calculatePrintCost==='function') calculatePrintCost();
+      if (typeof calculateBannerCost==='function') calculateBannerCost();
+      if (typeof calculateFinishCost==='function') calculateFinishCost();
+    }
+    return data?.prices || null;
+  }
+  async function saveCalcPrices(prices) {
+    if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar preços.');
+    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação dos preços');
+    if (!user) throw new Error('Sessão Supabase não autenticada.');
+    const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single(); fail(pe,'Verificação do administrador');
+    if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar os preços.');
+    const safePrices={};
+    Object.keys(DEFAULT_CALC_PRICES).forEach(key=>{ const value=Number(prices?.[key]); if(!Number.isFinite(value)||value<0) throw new Error('Preço inválido: '+key); safePrices[key]=value; });
+    const row={id:'default',prices:safePrices,updated_by:user.id,updated_at:new Date().toISOString()};
+    const {error}=await client.from('calculator_prices').upsert(row,{onConflict:'id'}); fail(error,'Gravação dos preços das calculadoras');
+    calcPrices={...DEFAULT_CALC_PRICES,...safePrices};
+    localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));
+    setStatus('Banco online • preços compartilhados','online');
+    return calcPrices;
+  }
   async function loadData() {
     if (!client) await init();
     if (!client) throw new Error('Cliente Supabase não inicializado');
     const {data:{user},error:authError}=await client.auth.getUser(); fail(authError,'Autenticação');
     if (!user) throw new Error('Sessão não autenticada');
-    const [pr,cr,sr,ur]=await Promise.all([
+    const [pr,cr,sr]=await Promise.all([
       client.from('products').select('*').eq('active',true),
       client.from('customers').select('*').eq('active',true),
-      client.from('sales').select('*').order('sale_date',{ascending:false}).limit(2000),
-      client.from('profiles').select('id,full_name,username,email,role,active,created_at').eq('active',true).order('created_at',{ascending:true})
+      client.from('sales').select('*').order('sale_date',{ascending:false}).limit(2000)
     ]);
-    fail(pr.error,'Leitura de produtos'); fail(cr.error,'Leitura de clientes'); fail(sr.error,'Leitura de vendas'); fail(ur.error,'Leitura de usuários');
-    if (ur.data && typeof users!=='undefined') {
-      users=ur.data.map(u=>({id:u.id,fullname:u.full_name,username:u.username||'',role:u.role,email:u.email||''}));
-      localStorage.setItem('pdv_users',JSON.stringify(users));
-    }
+    fail(pr.error,'Leitura de produtos'); fail(cr.error,'Leitura de clientes'); fail(sr.error,'Leitura de vendas');
     if (pr.data?.length && typeof catalog!=='undefined') { catalog=pr.data.map(productFromDb); localStorage.setItem('pdv_catalog',JSON.stringify(catalog)); }
     if (cr.data?.length && typeof customers!=='undefined') { customers=cr.data.map(customerFromDb); localStorage.setItem('pdv_customers',JSON.stringify(customers)); }
     if (sr.data?.length && typeof salesHistory!=='undefined') {
@@ -83,6 +112,6 @@
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
