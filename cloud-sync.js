@@ -1,5 +1,6 @@
 /* PDV Cloud sync - Supabase Auth + persistence for products, customers and sales. */
 (() => {
+  if (window.PDVCloud) { console.warn('PDVCloud já foi inicializado; evitando instância duplicada.'); return; }
   const cfg = window.PDV_SUPABASE_CONFIG || {};
   let client = null;
   let cloudReady = false;
@@ -87,6 +88,24 @@
     }
     cloudReady=true; setStatus('Banco online • dados carregados','online');
   }
+  // Salva um único produto imediatamente no Supabase e só confirma após retorno do banco.
+  async function saveProduct(product) {
+    if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar produtos.');
+    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação do produto');
+    if (!user) throw new Error('Sessão Supabase não autenticada.');
+    const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single();
+    fail(pe,'Verificação do administrador');
+    if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar produtos.');
+    const row=productToDb(product);
+    const {data:saved,error}=await client.from('products').upsert(row,{onConflict:'id'}).select('*').single();
+    fail(error,'Gravação do produto');
+    if (!saved || String(saved.id)!==String(product.id) || Number(saved.price)!==Number(product.price)) {
+      throw new Error('O Supabase não confirmou o preço do produto. Confira a tabela products e as permissões RLS.');
+    }
+    setStatus('Banco online • produto sincronizado','online');
+    return productFromDb(saved);
+  }
+
   async function syncData() {
     if (!client || !cloudReady) return;
     const job=async()=>{
@@ -115,6 +134,6 @@
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
