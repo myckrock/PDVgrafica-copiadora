@@ -1071,7 +1071,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="cloud-sync.js?v=20261004-2"></script>
+    <script src="cloud-sync.js?v=20261004-3"></script>
 
     <script>
     /* APPLICATION STATE & SEEDED DATA */
@@ -2462,34 +2462,40 @@
         }
     }
 
-    function handleSaveProduct(e) {
+    async function handleSaveProduct(e) {
         e.preventDefault();
         const id = document.getElementById('prod-id').value;
         const name = document.getElementById('prod-name').value.trim();
         const category = document.getElementById('prod-category').value;
         const price = parseFloat(document.getElementById('prod-price').value) || 0;
         const calcEnabled = document.getElementById('prod-calc-enabled').checked;
-
-        if (id) {
-            const p = catalog.find(x => x.id === id);
-            if (p) { p.name = name; p.category = category; p.price = price; p.calcEnabled = calcEnabled; }
-        } else {
-            catalog.push({
-                id: 'p_' + Date.now(),
-                name: name,
-                category: category,
-                price: price,
-                calcEnabled,
-                icon: 'fa-box'
-            });
+        if (!currentUser || currentUser.role !== 'ADMIN') { showToast('Somente o administrador pode alterar produtos.', 'error'); return; }
+        if (!name || !Number.isFinite(price) || price < 0) { showToast('Informe um nome e preço válido.', 'error'); return; }
+        const existing = id ? catalog.find(x => String(x.id) === String(id)) : null;
+        const product = {
+            id: id || ('p_' + Date.now()), name, category, price, calcEnabled,
+            icon: existing?.icon || 'fa-box',
+            stock: existing?.stock, controlsStock: !!existing?.controlsStock,
+            active: existing?.active !== false
+        };
+        try {
+            if (!window.PDVCloud?.ready || typeof window.PDVCloud.saveProduct !== 'function') {
+                throw new Error('A sincronização de produtos não está disponível. Atualize os arquivos cloud-sync.js e index.html no GitHub e recarregue o PDV.');
+            }
+            const savedProduct = await window.PDVCloud.saveProduct(product);
+            const index = catalog.findIndex(x => String(x.id) === String(savedProduct.id));
+            if (index >= 0) catalog[index] = { ...product, ...savedProduct, calcEnabled };
+            else catalog.push({ ...product, ...savedProduct, calcEnabled });
+            saveState();
+            closeProductModal();
+            renderAdminCatalog();
+            renderCatalog();
+            renderCustomCalculator();
+            showToast('Produto salvo no Supabase e compartilhado entre dispositivos!', 'success');
+        } catch (err) {
+            console.error('Falha ao salvar produto no Supabase:', err);
+            showToast(err.message || 'Não foi possível salvar o produto no Supabase.', 'error');
         }
-
-        saveState();
-        closeProductModal();
-        renderAdminCatalog();
-        renderCatalog();
-        renderCustomCalculator();
-        showToast('Produto salvo com sucesso!', 'success');
     }
 
     // System Users Management
