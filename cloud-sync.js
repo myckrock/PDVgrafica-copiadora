@@ -114,7 +114,7 @@
       if(!profile?.active) throw new Error('Perfil inativo');
       // Sincronização dos registros já carregados no PDV, usando IDs estáveis.
       if(typeof catalog!=='undefined' && profile.role==='ADMIN') { const rows=catalog.map(productToDb); if(rows.length){const r=await client.from('products').upsert(rows,{onConflict:'id'});fail(r.error,'Gravação de produtos');} }
-      if(typeof customers!=='undefined' && profile.role==='ADMIN') { const rows=customers.map(customerToDb); if(rows.length){const r=await client.from('customers').upsert(rows,{onConflict:'id'});fail(r.error,'Gravação de clientes');} }
+      // Clientes e saldos financeiros são gravados por RPCs específicas; não sobrescrever saldos com cache local.
       setStatus('Banco online • sincronizado','online');
     };
     syncInProgress=syncInProgress.then(job,job); return syncInProgress;
@@ -128,12 +128,42 @@
     if(its.length){const ins=await client.from('sale_items').insert(its);fail(ins.error,'Gravação dos itens');}
     setStatus('Banco online • venda sincronizada','online');
   }
+  async function saveCustomer(customer) {
+    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para salvar clientes.');
+    const row=customerToDb(customer);
+    const {data,error}=await client.rpc('pdv_save_customer',{p_customer:row});
+    fail(error,'Gravação do cliente');
+    if (!data?.id) throw new Error('O banco não confirmou o cadastro do cliente.');
+    return customerFromDb(data);
+  }
+  async function addCustomerCredit(customerId,amount,note='Recarga de crédito') {
+    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para adicionar crédito.');
+    const {data,error}=await client.rpc('pdv_add_customer_credit',{p_customer_id:String(customerId),p_amount:Number(amount),p_note:note});
+    fail(error,'Recarga de crédito');
+    if (!data?.id) throw new Error('O banco não confirmou a recarga.');
+    return customerFromDb(data);
+  }
+  async function finalizeSale(s) {
+    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para concluir esta venda.');
+    const sale={id:String(s.id),sale_date:s.date||new Date().toISOString(),operator_username:s.operatorUsername||null,
+      operator_name:s.operatorName||null,customer:s.customer||null,customer_id:s.customerId||null,
+      customer_type:s.customerType||'CONSUMIDOR',subtotal:Number(s.subtotal)||0,discount:Number(s.discount)||0,
+      total:Number(s.total)||0,pay_method:String(s.payMethod||'')};
+    const items=(s.items||[]).map(i=>({product_id:i.id?String(i.id):null,product_name:String(i.name||i.productName||'Item'),
+      quantity:Number(i.qty??i.quantity)||1,unit_price:Number(i.price??i.unitPrice)||0,
+      total:Number(i.totalPrice??i.total??((Number(i.price??i.unitPrice)||0)*(Number(i.qty??i.quantity)||1)))}));
+    const {data,error}=await client.rpc('pdv_finalize_sale',{p_sale:sale,p_items:items});
+    fail(error,'Finalização da venda');
+    if (!data || typeof data!=='object') throw new Error('O banco não confirmou a venda.');
+    setStatus(data.duplicate?'Banco online • venda já registrada':'Banco online • venda e saldo atualizados','online');
+    return {duplicate:!!data.duplicate,customer:data.customer?customerFromDb(data.customer):null};
+  }
   async function showStatus(){
     if(!client) await init();
     if(!client){alert('Confira a URL, a chave pública e o carregamento da biblioteca Supabase.');return;}
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
