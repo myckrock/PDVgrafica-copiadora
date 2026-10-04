@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pdv-grafica-v1.1.0';
+const CACHE_NAME = 'pdv-grafica-v1.1.2';
 const APP_URL = './index.html';
 
 self.addEventListener('install', event => {
