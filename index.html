@@ -140,7 +140,7 @@
                             <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Usuário / Login</label>
                             <div class="relative">
                                 <i class="fa-solid fa-user absolute left-3 top-3 text-slate-400 text-xs"></i>
-                                <input type="text" id="login-username" required class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm outline-none transition" placeholder="Ex: joao, maria, admin">
+                                <input type="email" id="login-username" autocomplete="username" required class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-sm outline-none transition" placeholder="seuemail@exemplo.com">
                             </div>
                         </div>
 
@@ -161,8 +161,8 @@
             Primeiro acesso? Cadastrar Conta de Administrador
         </button>
     </div>
-                        <!-- Quick Demo Users Helper -->
-                        <div class="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+                        <!-- Contas demonstrativas locais desativadas no modo Supabase -->
+                        <div class="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1 hidden">
                             <p class="font-bold text-slate-700">Contas Demonstrativas Rápidas:</p>
                             <div class="flex flex-wrap gap-1.5 pt-1">
                                 <button type="button" onclick="quickFill('admin','1234')" class="px-2 py-1 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 rounded font-semibold text-[10px]">Admin (admin)</button>
@@ -1382,8 +1382,36 @@
     }
 
     // App Initialization
-    window.onload = function() {
+    window.onload = async function() {
         lucide.createIcons();
+        // A sessão local nunca concede acesso por si só: validar sempre no Supabase.
+        currentUser = null;
+        localStorage.removeItem('pdv_current_user');
+        try {
+            await PDVCloud.init();
+            if (PDVCloud.client) {
+                const { data: authData, error: authError } = await PDVCloud.client.auth.getUser();
+                if (authError) throw authError;
+                if (authData?.user) {
+                    const { data: profile, error: profileError } = await PDVCloud.client
+                        .from('profiles')
+                        .select('id,full_name,username,role,active')
+                        .eq('id', authData.user.id)
+                        .single();
+                    if (profileError) throw profileError;
+                    if (!profile?.active) throw new Error('Perfil não encontrado ou inativo. Peça ao administrador para conferir a tabela profiles.');
+                    currentUser = { id: profile.id, username: profile.username || authData.user.email, fullname: profile.full_name || authData.user.email, name: profile.full_name || authData.user.email, role: profile.role, email: authData.user.email };
+                    localStorage.setItem('pdv_current_user', JSON.stringify(currentUser));
+                    await PDVCloud.loadData();
+                    await PDVCloud.loadCalcPrices();
+                }
+            }
+        } catch (err) {
+            console.error('Falha ao restaurar sessão Supabase:', err);
+            currentUser = null;
+            localStorage.removeItem('pdv_current_user');
+            window.PDVCloud?.setStatus?.('Falha ao validar sessão', 'error');
+        }
         checkAuth();
         calculatePrintCost();
         calculateBannerCost();
@@ -1497,7 +1525,9 @@
         }
     }
 
-    function handleLogout() {
+    async function handleLogout() {
+        try { if (window.PDVCloud?.client) { const { error } = await PDVCloud.client.auth.signOut(); if (error) throw error; } }
+        catch (err) { console.error('Falha ao encerrar sessão Supabase:', err); showToast('Não foi possível encerrar a sessão no Supabase: ' + (err.message || ''), 'error'); return; }
         currentUser = null;
         localStorage.removeItem('pdv_current_user');
         checkAuth();
@@ -2885,30 +2915,41 @@
 
     // Correções de compatibilidade e navegação (v1.1.1)
     // Mantém compatibilidade com contas antigas que armazenavam a senha em `pass`.
-    function handleLogin(e) {
+    async function handleLogin(e) {
         if (e) e.preventDefault();
-        const usernameInput = document.getElementById('login-username').value.trim().toLowerCase();
-        const passwordInput = document.getElementById('login-password').value;
-        const savedUsers = JSON.parse(localStorage.getItem('pdv_users') || 'null') || users;
-        const user = savedUsers.find(u => String(u.username || '').toLowerCase() === usernameInput && String(u.password ?? u.pass ?? '') === passwordInput);
-        if (!user) { showToast('Usuário ou senha inválidos.', 'error'); return; }
-        currentUser = { ...user, fullname: user.fullname || user.name || user.username };
-        localStorage.setItem('pdv_current_user', JSON.stringify(currentUser));
-        checkAuth();
-        showToast(`Bem-vindo, ${currentUser.fullname}!`, 'success');
+        const email = document.getElementById('login-username').value.trim().toLowerCase();
+        const password = document.getElementById('login-password').value;
+        const submit = document.querySelector('#login-form button[type="submit"]');
+        if (!window.PDVCloud?.client) { showToast('Supabase não inicializado. Atualize a página e tente novamente.', 'error'); return; }
+        if (!email.includes('@')) { showToast('Use o e-mail cadastrado no Supabase para entrar.', 'error'); return; }
+        if (submit) submit.disabled = true;
+        try {
+            const { data, error } = await PDVCloud.client.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            const { data: profile, error: profileError } = await PDVCloud.client.from('profiles')
+                .select('id,full_name,username,role,active').eq('id', data.user.id).single();
+            if (profileError) throw profileError;
+            if (!profile || !profile.active) {
+                await PDVCloud.client.auth.signOut();
+                throw new Error('Perfil não encontrado ou inativo. Peça ao administrador para conferir a tabela profiles.');
+            }
+            currentUser = { id: profile.id, username: profile.username || data.user.email, fullname: profile.full_name || data.user.email, name: profile.full_name || data.user.email, role: profile.role, email: data.user.email };
+            localStorage.setItem('pdv_current_user', JSON.stringify(currentUser));
+            await PDVCloud.loadData();
+            await PDVCloud.loadCalcPrices();
+            checkAuth();
+            showToast(`Bem-vindo, ${currentUser.fullname}!`, 'success');
+        } catch (err) {
+            console.error('Falha no login/sincronização:', err);
+            currentUser = null;
+            localStorage.removeItem('pdv_current_user');
+            showToast('Não foi possível entrar: ' + (err.message || 'erro de conexão'), 'error');
+        } finally { if (submit) submit.disabled = false; }
     }
 
     // Cadastro inicial disponível apenas quando ainda não há contas persistidas.
     function showRegisterScreen() {
-        if (localStorage.getItem('pdv_users')) {
-            showToast('O cadastro inicial já foi concluído. Entre como administrador para gerenciar usuários.', 'info');
-            return;
-        }
-        document.getElementById('login-form').classList.add('hidden');
-        document.getElementById('register-form').classList.remove('hidden');
-        const adminRadio = document.querySelector('input[name="reg-role"][value="ADMIN"]');
-        if (adminRadio) adminRadio.checked = true;
-        document.querySelectorAll('input[name="reg-role"]').forEach(el => { if (el.value !== 'ADMIN') el.disabled = true; });
+        showToast('O cadastro inicial local está desativado. Use a conta de administrador cadastrada no Supabase.', 'info');
     }
 
     function showLoginScreen() {
