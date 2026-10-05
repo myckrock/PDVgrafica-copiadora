@@ -158,12 +158,35 @@
     setStatus(data.duplicate?'Banco online • venda já registrada':'Banco online • venda e saldo atualizados','online');
     return {duplicate:!!data.duplicate,customer:data.customer?customerFromDb(data.customer):null};
   }
+  async function updateOwnAdminAccount({fullname,username,email,password}) {
+    if (!client || !cloudReady) throw new Error('Entre novamente no Supabase antes de alterar a conta.');
+    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação da conta');
+    if (!user) throw new Error('Sessão não autenticada.');
+    const {data:profile,error:pe}=await client.from('profiles').select('id,role,active').eq('id',user.id).single();
+    fail(pe,'Verificação do administrador');
+    if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente o administrador ativo pode alterar a própria conta.');
+    const {data:profileData,error:rpcError}=await client.rpc('pdv_update_own_admin_profile',{p_full_name:fullname,p_username:username});
+    fail(rpcError,'Atualização do perfil');
+    if (!profileData?.id || profileData.id!==user.id) throw new Error('O Supabase não confirmou a atualização do perfil.');
+    const authChanges={};
+    const emailChanged=String(email).toLowerCase()!==String(user.email||'').toLowerCase();
+    if(emailChanged) authChanges.email=email;
+    if(password) authChanges.password=password;
+    if(Object.keys(authChanges).length) {
+      const {data,error}=await client.auth.updateUser(authChanges);
+      fail(error,'Atualização das credenciais');
+      if(!data?.user) throw new Error('O Supabase não confirmou a atualização das credenciais.');
+    }
+    setStatus('Banco online • conta atualizada','online');
+    return {full_name:profileData.full_name,username:profileData.username,email:emailChanged?email:user.email,emailChanged};
+  }
+
   async function showStatus(){
     if(!client) await init();
     if(!client){alert('Confira a URL, a chave pública e o carregamento da biblioteca Supabase.');return;}
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,updateOwnAdminAccount,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
