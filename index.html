@@ -616,6 +616,9 @@
                     <button onclick="switchAdminSubTab('customers-manage')" id="admin-subtab-customers-manage" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
                         <i class="fa-solid fa-address-book text-xs"></i> Clientes
                     </button>
+                    <button onclick="switchAdminSubTab('my-account')" id="admin-subtab-my-account" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-user-shield text-xs"></i> Minha Conta
+                    </button>
                 </div>
                 <!-- PAINEL DE GESTÃO DE USUÁRIOS (VISÍVEL APENAS NA ÁREA ADMIN) -->
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-6">
@@ -861,6 +864,25 @@
                         </table>
                     </div>
                 </div>
+                <!-- SUBTAB: ADMIN SELF ACCOUNT -->
+                <div id="admin-subview-my-account" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+                    <div class="p-5 border-b border-slate-100 bg-slate-50">
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2"><i class="fa-solid fa-user-shield text-indigo-600"></i> Minha Conta de Administrador</h3>
+                        <p class="text-xs text-slate-500 mt-1">Altere seus dados de acesso. A senha nunca será exibida.</p>
+                    </div>
+                    <form id="admin-own-account-form" onsubmit="handleUpdateOwnAdminAccount(event)" class="p-5 space-y-4 max-w-xl">
+                        <div><label class="block text-xs font-bold text-slate-600 mb-1" for="admin-own-fullname">Nome completo</label><input id="admin-own-fullname" type="text" required maxlength="120" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-600 mb-1" for="admin-own-username">Login / nome de usuário</label><input id="admin-own-username" type="text" required maxlength="60" autocomplete="username" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><p class="text-[11px] text-slate-500 mt-1">Nome de usuário exibido no sistema. O acesso atual é feito pelo e-mail do Supabase.</p></div>
+                        <div><label class="block text-xs font-bold text-slate-600 mb-1" for="admin-own-email">E-mail de acesso</label><input id="admin-own-email" type="email" required maxlength="254" autocomplete="email" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></div>
+                        <div class="border-t border-slate-100 pt-4 space-y-3">
+                            <p class="text-xs font-bold text-slate-700">Alterar senha (opcional)</p>
+                            <div><label class="block text-xs font-semibold text-slate-600 mb-1" for="admin-own-password">Nova senha</label><input id="admin-own-password" type="password" minlength="8" autocomplete="new-password" placeholder="Deixe em branco para manter a senha atual" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></div>
+                            <div><label class="block text-xs font-semibold text-slate-600 mb-1" for="admin-own-password-confirm">Confirme a nova senha</label><input id="admin-own-password-confirm" type="password" minlength="8" autocomplete="new-password" placeholder="Repita a nova senha" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></div>
+                        </div>
+                        <div class="flex justify-end"><button type="submit" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold"><i class="fa-solid fa-floppy-disk mr-1"></i> Salvar alterações</button></div>
+                        <p class="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">Se alterar o e-mail, o Supabase poderá solicitar confirmação no novo endereço. A sessão atual pode permanecer ativa até a confirmação.</p>
+                    </form>
+                </div>
             </section>
         </main>
 
@@ -1071,7 +1093,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="cloud-sync.js?v=finance-1"></script>
+    <script src="cloud-sync.js?v=admin-account-1"></script>
 
     <script>
     /* APPLICATION STATE & SEEDED DATA */
@@ -2087,8 +2109,49 @@
     let revTimelineChartInstance = null;
     let catShareChartInstance = null;
 
+    function loadOwnAdminAccountForm() {
+        if (!requireAdmin()) return;
+        const form = document.getElementById('admin-own-account-form');
+        if (!form) return;
+        document.getElementById('admin-own-fullname').value = currentUser?.fullname || currentUser?.name || '';
+        document.getElementById('admin-own-username').value = currentUser?.username || '';
+        document.getElementById('admin-own-email').value = currentUser?.email || '';
+        document.getElementById('admin-own-password').value = '';
+        document.getElementById('admin-own-password-confirm').value = '';
+    }
+
+    async function handleUpdateOwnAdminAccount(event) {
+        event.preventDefault();
+        if (!requireAdmin()) return;
+        const fullname = document.getElementById('admin-own-fullname').value.trim();
+        const username = document.getElementById('admin-own-username').value.trim();
+        const email = document.getElementById('admin-own-email').value.trim().toLowerCase();
+        const password = document.getElementById('admin-own-password').value;
+        const confirm = document.getElementById('admin-own-password-confirm').value;
+        const submit = event.submitter || document.querySelector('#admin-own-account-form button[type="submit"]');
+        if (!fullname || !username || !email || !email.includes('@')) { showToast('Preencha nome, login e um e-mail válido.', 'error'); return; }
+        if (password && password.length < 8) { showToast('A nova senha deve ter pelo menos 8 caracteres.', 'error'); return; }
+        if (password !== confirm) { showToast('A confirmação da senha não confere.', 'error'); return; }
+        if (!window.PDVCloud?.updateOwnAdminAccount) { showToast('Atualização da conta indisponível. Atualize os arquivos do PDV.', 'error'); return; }
+        if (submit) submit.disabled = true;
+        try {
+            const updated = await PDVCloud.updateOwnAdminAccount({fullname, username, email, password});
+            currentUser = {...currentUser, fullname: updated.full_name || fullname, name: updated.full_name || fullname, username: updated.username || username, email: updated.email || email};
+            localStorage.setItem('pdv_current_user', JSON.stringify(currentUser));
+            document.getElementById('current-user-display').innerText = currentUser.fullname;
+            document.getElementById('admin-own-password').value = '';
+            document.getElementById('admin-own-password-confirm').value = '';
+            showToast(updated.emailChanged ? 'Dados salvos. Confirme o novo e-mail, se solicitado pelo Supabase.' : 'Dados da conta atualizados.', 'success');
+        } catch (err) {
+            console.error('Falha ao atualizar conta do administrador:', err);
+            showToast('Não foi possível atualizar a conta: ' + (err.message || 'erro desconhecido'), 'error');
+        } finally {
+            if (submit) submit.disabled = false;
+        }
+    }
+
     function switchAdminSubTab(subtab) {
-        ['operator-sales', 'dashboard', 'catalog-manage', 'users-manage', 'customers-manage'].forEach(st => {
+        ['operator-sales', 'dashboard', 'catalog-manage', 'users-manage', 'customers-manage', 'my-account'].forEach(st => {
             document.getElementById(`admin-subview-${st}`).classList.add('hidden');
             document.getElementById(`admin-subtab-${st}`).className = 'px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2';
         });
@@ -2107,6 +2170,9 @@
             renderUsersList();
         } else if (subtab === 'customers-manage') {
             renderAdminCustomers();
+        } else if (subtab === 'my-account') {
+            if (!requireAdmin()) { switchAdminSubTab('operator-sales'); return; }
+            loadOwnAdminAccountForm();
         }
     }
 
