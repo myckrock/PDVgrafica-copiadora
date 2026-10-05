@@ -173,12 +173,13 @@
     if(emailChanged) authChanges.email=email;
     if(password) authChanges.password=password;
     if(Object.keys(authChanges).length) {
-      const {data,error}=await client.auth.updateUser(authChanges);
+      const authOptions=emailChanged ? {emailRedirectTo:window.location.origin+window.location.pathname} : undefined;
+      const {data,error}=await client.auth.updateUser(authChanges,authOptions);
       fail(error,'Atualização das credenciais');
       if(!data?.user) throw new Error('O Supabase não confirmou a atualização das credenciais.');
     }
     setStatus('Banco online • conta atualizada','online');
-    return {full_name:profileData.full_name,username:profileData.username,email:emailChanged?email:user.email,emailChanged};
+    return {full_name:profileData.full_name,username:profileData.username,email:user.email,pendingEmail:emailChanged?email:null,emailChanged};
   }
 
   async function showStatus(){
