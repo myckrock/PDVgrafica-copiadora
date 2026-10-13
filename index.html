@@ -2313,8 +2313,49 @@
     function boolImport(v,fallback=true){const s=String(v??'').trim().toLowerCase();if(!s)return fallback;return !['nao','não','false','0','inativo','inativa'].includes(s);}
     function sheetRows(workbook, names) {
         const target=(names||[]).map(normalizeImportKey);
-        const entry=workbook.SheetNames.find(n=>target.includes(normalizeImportKey(n)));
+        const entry=workbook.SheetNames.find(n=>{
+            const key=normalizeImportKey(n);
+            return target.includes(key) || target.some(t=>key.startsWith(t+'_') || key.includes(t));
+        });
         return entry ? XLSX.utils.sheet_to_json(workbook.Sheets[entry],{defval:''}) : [];
+    }
+
+    function findImportSheet(workbook, kind) {
+        const aliases = {
+            customers:['clientes','cliente','mensalistas','clientes_mensalistas','clientes_mensalistas_credito_antecipado'],
+            products:['produtos','produto','servicos','produtos_servicos'],
+            users:['operadores','operador','usuarios','usuarios_operadores','users'],
+            sales:['vendas','venda','historico_vendas'],
+            credits:['creditos','credito','movimentacoes_credito'],
+            calculator:['calculadoras','calculadora','precos_calculadoras']
+        };
+        const wanted = (aliases[kind]||[]).map(normalizeImportKey);
+        return workbook.SheetNames.find(n=>{
+            const k=normalizeImportKey(n);
+            return wanted.some(w=>k===w || k.startsWith(w+'_') || k.includes(w));
+        }) || null;
+    }
+
+    function rowsForImportKind(workbook, kind) {
+        const sheet=findImportSheet(workbook,kind);
+        return sheet ? XLSX.utils.sheet_to_json(workbook.Sheets[sheet],{defval:''}) : [];
+    }
+
+    function detectImportKind(workbook) {
+        const order=['customers','products','users','sales','credits','calculator'];
+        for(const kind of order) if(findImportSheet(workbook,kind)) return kind;
+
+        // Também reconhece uma planilha com nome genérico (Planilha1, Sheet1 etc.)
+        // pelo conteúdo da primeira linha.
+        for(const name of workbook.SheetNames){
+            const rows=XLSX.utils.sheet_to_json(workbook.Sheets[name],{defval:'',header:1});
+            const header=(rows[0]||[]).map(normalizeImportKey);
+            if(header.some(k=>['nome','name','cpf','cpf_cnpj','telefone','phone'].includes(k))) return 'customers';
+            if(header.some(k=>['preco','price','valor'].includes(k)) && header.some(k=>['produto','name','nome'].includes(k))) return 'products';
+            if(header.some(k=>['username','usuario','email'].includes(k)) && header.some(k=>['role','perfil'].includes(k))) return 'users';
+            if(header.some(k=>['total','subtotal','pay_method','forma_pagamento'].includes(k))) return 'sales';
+        }
+        return null;
     }
 
     function importXlsxRows(rows, kind) {
@@ -2340,25 +2381,95 @@
         try {
             if(!/\.xlsx$/i.test(file.name)) throw new Error('Selecione um arquivo .xlsx.');
             if(!window.XLSX) throw new Error('Biblioteca Excel não carregada. Recarregue o sistema.');
+
             const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});
-            const names=wb.SheetNames.map(normalizeImportKey);
-            const hasBackup=['clientes','produtos','operadores','vendas'].every(n=>names.includes(n));
-            if(hasBackup) {
-                if(!confirm('Importar este backup Excel substituirá os dados locais atuais de produtos, clientes, vendas, usuários e preços. Deseja continuar?'))return;
+            const sheetNames=wb.SheetNames||[];
+            const normalizedNames=sheetNames.map(normalizeImportKey);
+
+            // Backup completo: basta conter as planilhas principais. Planilhas opcionais
+            // (créditos, calculadoras, itens da venda e nuvem) são importadas quando presentes.
+            const hasCoreBackup=['customers','products','users'].every(kind=>!!findImportSheet(wb,kind));
+            const hasSales=!!findImportSheet(wb,'sales');
+            const looksLikeBackup=hasCoreBackup && (hasSales || sheetNames.length>=4);
+
+            if(looksLikeBackup) {
+                if(!confirm('Importar este backup Excel atualizará os dados locais atuais. Deseja continuar?'))return;
+
                 const result=[];
-                const customerRows=sheetRows(wb,['Clientes']);if(customerRows.length)result.push(importXlsxRows(customerRows,'customers'));
-                const productRows=sheetRows(wb,['Produtos']);if(productRows.length)result.push(importXlsxRows(productRows,'products'));
-                const userRows=sheetRows(wb,['Operadores']);if(userRows.length)result.push(importXlsxRows(userRows,'users'));
-                const salesRows=sheetRows(wb,['Vendas']);if(salesRows.length){salesHistory=salesRows.map(r=>{const o={};Object.entries(r).forEach(([k,v])=>o[normalizeImportKey(k)]=v);return {id:o.id||crypto.randomUUID?.(),date:o.date||'',operatorUsername:o.operator_username||'',operatorName:o.operator_name||'',customer:o.customer||'',customerId:o.customer_id||null,customerType:o.customer_type||'',subtotal:numImport(o.subtotal),discount:numImport(o.discount),total:numImport(o.total),payMethod:o.pay_method||''};});saveState();renderSalesHistory();result.push(`Importadas ${salesHistory.length} vendas`);}
-                const calcRows=sheetRows(wb,['Calculadoras']);if(calcRows.length){const cp={...DEFAULT_CALC_PRICES};calcRows.forEach(r=>{const k=r.chave||r.key;if(k)cp[k]=numImport(r.valor??r.value);});calcPrices=cp;localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));}
+
+                const customerRows=rowsForImportKind(wb,'customers');
+                if(customerRows.length) result.push(importXlsxRows(customerRows,'customers'));
+
+                const productRows=rowsForImportKind(wb,'products');
+                if(productRows.length) result.push(importXlsxRows(productRows,'products'));
+
+                const userRows=rowsForImportKind(wb,'users');
+                if(userRows.length) result.push(importXlsxRows(userRows,'users'));
+
+                const salesRows=rowsForImportKind(wb,'sales');
+                if(salesRows.length){
+                    const normalizedSales=salesRows.map(r=>{
+                        const o={};Object.entries(r).forEach(([k,v])=>o[normalizeImportKey(k)]=v);
+                        return {
+                            id:o.id||crypto.randomUUID?.()||`sale_import_${Date.now()}`,
+                            date:o.date||o.data||'',
+                            operatorUsername:o.operator_username||o.usuario||o.operador_username||'',
+                            operatorName:o.operator_name||o.operador||'',
+                            customer:o.customer||o.cliente||'',
+                            customerId:o.customer_id||o.cliente_id||null,
+                            customerType:o.customer_type||o.tipo_cliente||'',
+                            subtotal:numImport(o.subtotal),
+                            discount:numImport(o.discount),
+                            total:numImport(o.total),
+                            payMethod:o.pay_method||o.forma_pagamento||o.pagamento||''
+                        };
+                    });
+                    salesHistory=normalizedSales;
+                    saveState();renderSalesHistory();
+                    result.push(`Importadas ${salesHistory.length} vendas`);
+                }
+
+                const calcRows=rowsForImportKind(wb,'calculator');
+                if(calcRows.length){
+                    const cp={...DEFAULT_CALC_PRICES};
+                    calcRows.forEach(r=>{
+                        const k=r.chave||r.key||r.codigo;
+                        if(k)cp[k]=numImport(r.valor??r.value??r.preco);
+                    });
+                    calcPrices=cp;
+                    localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));
+                    result.push(`Calculadoras: ${calcRows.length} registro(s)`);
+                }
+
+                const creditRows=rowsForImportKind(wb,'credits');
+                if(creditRows.length) result.push(`Créditos encontrados: ${creditRows.length} registro(s)`);
+
                 saveState();renderCatalog();renderCart();renderAdminCatalog();renderUsersList();renderUsersTable();renderAdminCustomers();
                 setImportExportStatus('Backup Excel importado com sucesso. '+result.join(' • ')+' Os operadores foram importados sem senhas.');
-            } else if(names.includes('clientes')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Clientes']),'customers'));
-            else if(names.includes('produtos')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Produtos']),'products'));
-            else if(names.includes('operadores')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Operadores']),'users'));
-            else throw new Error('Não encontrei uma planilha reconhecida. Use Clientes, Produtos ou Operadores, ou o Backup completo do PDV.');
-        } catch(err){console.error('Importação XLSX:',err);setImportExportStatus('Falha na importação: '+(err.message||'arquivo inválido'),'error');}
-        finally{event.target.value='';}
+            } else {
+                const kind=detectImportKind(wb);
+                if(!kind){
+                    throw new Error('Não encontrei uma planilha reconhecida. Abas encontradas: '+(sheetNames.join(', ')||'nenhuma')+'. Use o backup gerado pelo PDV ou uma planilha Clientes, Produtos ou Operadores.');
+                }
+                const rows=rowsForImportKind(wb,kind);
+                // Para planilha genérica (Planilha1/Sheet1), detectImportKind encontrou pelo conteúdo.
+                const finalRows=rows.length ? rows : (()=> {
+                    const sheet=sheetNames.find(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:'',header:1}).length);
+                    return sheet ? XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:''}) : [];
+                })();
+                if(!finalRows.length) throw new Error('A planilha está vazia.');
+
+                if(kind==='customers') setImportExportStatus(importXlsxRows(finalRows,'customers'));
+                else if(kind==='products') setImportExportStatus(importXlsxRows(finalRows,'products'));
+                else if(kind==='users') setImportExportStatus(importXlsxRows(finalRows,'users'));
+                else throw new Error('Importação individual disponível para Clientes, Produtos e Operadores.');
+            }
+        } catch(err){
+            console.error('Importação XLSX:',err);
+            setImportExportStatus('Falha na importação: '+(err.message||'arquivo inválido'),'error');
+        } finally {
+            event.target.value='';
+        }
     }
 
     function switchAdminSubTab(subtab) {
