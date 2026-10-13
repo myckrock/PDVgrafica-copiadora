@@ -21,6 +21,7 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <!-- Chart.js -->
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
         <!-- Lucide Icons -->
         <script src="https://unpkg.com/lucide@latest"></script>
         
@@ -890,40 +891,40 @@
                 <!-- SUBTAB: DATA IMPORT / EXPORT -->
                 <div id="admin-subview-data-manage" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
                     <div class="p-5 border-b border-slate-100 bg-slate-50">
-                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2"><i class="fa-solid fa-database text-indigo-600"></i> Importar e Exportar Dados</h3>
-                        <p class="text-xs text-slate-500 mt-1">Faça backup do cadastro e transporte dados entre computadores usando JSON ou CSV.</p>
+                        <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2"><i class="fa-solid fa-file-excel text-emerald-600"></i> Importar e Exportar em Excel</h3>
+                        <p class="text-xs text-slate-500 mt-1">Faça backup e transporte cadastros usando arquivos <b>.xlsx</b>, compatíveis com Excel e LibreOffice.</p>
                     </div>
-
                     <div class="p-5 space-y-5">
                         <div class="grid md:grid-cols-2 gap-4">
                             <div class="rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-                                <div class="flex items-center gap-3 mb-2"><div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center"><i class="fa-solid fa-file-export"></i></div><div><h4 class="font-bold text-slate-800 text-sm">Exportar backup completo</h4><p class="text-[11px] text-slate-500">JSON com produtos, clientes, mensalistas, crédito, vendas, preços e cadastro de operadores.</p></div></div>
-                                <button type="button" onclick="exportPDVBackup()" class="mt-3 w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-download mr-1"></i> Baixar backup JSON</button>
+                                <div class="flex items-center gap-3 mb-2"><div class="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center"><i class="fa-solid fa-file-excel"></i></div><div><h4 class="font-bold text-slate-800 text-sm">Exportar para Excel</h4><p class="text-[11px] text-slate-500">Gera um arquivo .xlsx com uma ou várias planilhas.</p></div></div>
+                                <div class="mt-3 space-y-2">
+                                    <select id="pdv-export-xlsx-type" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs">
+                                        <option value="backup">Backup completo (todas as planilhas)</option>
+                                        <option value="customers">Clientes / Mensalistas / Crédito antecipado</option>
+                                        <option value="products">Produtos e serviços</option>
+                                        <option value="users">Operadores / usuários (sem senhas)</option>
+                                        <option value="sales">Histórico de vendas</option>
+                                        <option value="credits">Movimentações de crédito</option>
+                                        <option value="calculator">Preços das calculadoras</option>
+                                    </select>
+                                    <button type="button" onclick="exportPDVXLSX()" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-download mr-1"></i> Baixar arquivo .XLSX</button>
+                                </div>
                             </div>
                             <div class="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                                <div class="flex items-center gap-3 mb-2"><div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center"><i class="fa-solid fa-file-import"></i></div><div><h4 class="font-bold text-slate-800 text-sm">Importar backup</h4><p class="text-[11px] text-slate-500">Aceita JSON exportado pelo PDV. Os dados locais serão substituídos pelos dados do arquivo.</p></div></div>
-                                <input id="pdv-import-file" type="file" accept=".json,application/json,.csv,text/csv" class="hidden" onchange="handlePDVImportFile(event)">
-                                <button type="button" onclick="document.getElementById('pdv-import-file').click()" class="mt-3 w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-upload mr-1"></i> Selecionar arquivo</button>
+                                <div class="flex items-center gap-3 mb-2"><div class="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center"><i class="fa-solid fa-file-arrow-up"></i></div><div><h4 class="font-bold text-slate-800 text-sm">Importar arquivo Excel</h4><p class="text-[11px] text-slate-500">Importe um backup completo ou uma planilha individual.</p></div></div>
+                                <input id="pdv-import-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="hidden" onchange="handlePDVImportFile(event)">
+                                <button type="button" onclick="document.getElementById('pdv-import-file').click()" class="mt-3 w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-upload mr-1"></i> Selecionar arquivo .XLSX</button>
                             </div>
                         </div>
-
-                        <div class="border-t border-slate-100 pt-5">
-                            <div class="flex flex-col md:flex-row md:items-end gap-3">
-                                <div class="flex-1"><label class="block text-xs font-bold text-slate-600 mb-1">Exportar uma lista em CSV</label><select id="pdv-export-csv-type" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs"><option value="customers">Clientes / Mensalistas / Crédito antecipado</option><option value="products">Produtos e serviços</option><option value="users">Operadores / usuários (sem senhas)</option><option value="sales">Histórico de vendas</option></select></div>
-                                <button type="button" onclick="exportPDVCSV()" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-file-csv mr-1"></i> Exportar CSV</button>
-                            </div>
-                        </div>
-
                         <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                            <h4 class="font-bold text-slate-800 text-xs flex items-center gap-2"><i class="fa-solid fa-file-circle-plus text-indigo-600"></i> Importar lista CSV</h4>
-                            <p class="text-[11px] text-slate-500 mt-1">O sistema identifica automaticamente clientes, produtos ou operadores pelos nomes das colunas e pelo nome do arquivo.</p>
+                            <h4 class="font-bold text-slate-800 text-xs flex items-center gap-2"><i class="fa-solid fa-table text-emerald-600"></i> Planilhas do backup completo</h4>
                             <div class="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500">
-                                <span class="px-2 py-1 bg-white rounded-lg border">clientes.csv</span><span class="px-2 py-1 bg-white rounded-lg border">produtos.csv</span><span class="px-2 py-1 bg-white rounded-lg border">operadores.csv</span>
+                                <span class="px-2 py-1 bg-white rounded-lg border">Clientes</span><span class="px-2 py-1 bg-white rounded-lg border">Produtos</span><span class="px-2 py-1 bg-white rounded-lg border">Operadores</span><span class="px-2 py-1 bg-white rounded-lg border">Vendas</span><span class="px-2 py-1 bg-white rounded-lg border">Itens_Venda</span><span class="px-2 py-1 bg-white rounded-lg border">Creditos</span><span class="px-2 py-1 bg-white rounded-lg border">Calculadoras</span>
                             </div>
                         </div>
-
                         <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
-                            <b>Importante:</b> senhas de operadores nunca são exportadas. O arquivo pode transportar nome, usuário, e-mail, perfil e status, mas a conta de autenticação do Supabase precisa ser criada/gerenciada separadamente. O crédito antecipado e os limites dos mensalistas são preservados no backup JSON.
+                            <b>Importante:</b> senhas de operadores nunca são exportadas. A importação restaura os dados locais do PDV; ela não cria automaticamente contas de autenticação no Supabase. O saldo de crédito, limites de mensalistas e histórico local são preservados no Excel.
                         </div>
                         <div id="pdv-import-export-status" class="hidden rounded-xl px-3 py-2 text-xs font-semibold"></div>
                     </div>
@@ -2217,33 +2218,35 @@
         }));
     }
 
+    function xlsxRows(rows) {
+        return (rows || []).map(row => {
+            const out = {};
+            Object.entries(row || {}).forEach(([k,v]) => {
+                if (v === undefined) out[k] = '';
+                else if (v === null) out[k] = '';
+                else if (typeof v === 'object') out[k] = JSON.stringify(v);
+                else out[k] = v;
+            });
+            return out;
+        });
+    }
+
+    function appendXlsxSheet(wb, name, rows) {
+        const safeName = String(name).slice(0,31) || 'Planilha';
+        const data = xlsxRows(rows);
+        const ws = XLSX.utils.json_to_sheet(data.length ? data : [{Mensagem:'Sem registros'}]);
+        ws['!cols'] = Object.keys(data[0] || {Mensagem:''}).map(k => ({wch: Math.min(42, Math.max(12, String(k).length + 3))}));
+        XLSX.utils.book_append_sheet(wb, ws, safeName);
+    }
+
     async function buildPDVBackup() {
         if (!requireAdmin()) throw new Error('Acesso permitido somente ao Administrador.');
         const backup = {
-            format: 'PDV-GRAFICA-BACKUP',
-            version: 1,
-            exportedAt: new Date().toISOString(),
+            format: 'PDV-GRAFICA-BACKUP', version: 2, exportedAt: new Date().toISOString(),
             source: 'PDV Gráfica & Copiadora Pro',
-            local: {
-                products: catalog || [],
-                customers: customers || [],
-                sales: salesHistory || [],
-                users: safeExportUsers(users),
-                calculatorPrices: calcPrices || {},
-            },
-            cloud: {
-                profiles: [],
-                products: [],
-                customers: [],
-                sales: [],
-                saleItems: [],
-                creditTransactions: [],
-                calculatorPrices: null
-            }
+            local: { products: catalog || [], customers: customers || [], sales: salesHistory || [], users: safeExportUsers(users), calculatorPrices: calcPrices || {} },
+            cloud: { profiles: [], products: [], customers: [], sales: [], saleItems: [], creditTransactions: [], calculatorPrices: null }
         };
-
-        // Quando houver sessão, tenta enriquecer o backup com os dados atuais do Supabase.
-        // Falhas individuais não impedem o backup local.
         const cloud = window.PDVCloud?.client;
         if (cloud && window.PDVCloud?.ready) {
             const queries = await Promise.allSettled([
@@ -2254,129 +2257,108 @@
                 cloud.from('credit_transactions').select('*').order('created_at',{ascending:false}),
                 cloud.from('calculator_prices').select('*').eq('id','default').maybeSingle()
             ]);
-            const assign = (idx, key) => {
-                const r = queries[idx];
-                if (r.status === 'fulfilled' && !r.value.error) backup.cloud[key] = r.value.data || [];
-            };
+            const assign = (idx, key) => { const r=queries[idx]; if(r.status==='fulfilled' && !r.value.error) backup.cloud[key]=r.value.data||[]; };
             assign(0,'profiles'); assign(1,'products'); assign(2,'customers'); assign(3,'sales'); assign(4,'creditTransactions');
-            if (queries[5]?.status === 'fulfilled' && !queries[5].value.error) backup.cloud.calculatorPrices = queries[5].value.data || null;
-
-            // Itens das vendas são opcionais para o backup. Só consulta quando houver vendas.
-            if (backup.cloud.sales.length) {
-                const ids = backup.cloud.sales.map(s => s.id).filter(Boolean);
-                for (let i=0; i<ids.length; i+=500) {
-                    const chunk = ids.slice(i,i+500);
-                    const r = await cloud.from('sale_items').select('*').in('sale_id', chunk);
-                    if (!r.error && r.data) backup.cloud.saleItems.push(...r.data);
-                }
+            if(queries[5]?.status==='fulfilled' && !queries[5].value.error) backup.cloud.calculatorPrices=queries[5].value.data||null;
+            if(backup.cloud.sales.length) {
+                const ids=backup.cloud.sales.map(s=>s.id).filter(Boolean);
+                for(let i=0;i<ids.length;i+=500){ const r=await cloud.from('sale_items').select('*').in('sale_id',ids.slice(i,i+500)); if(!r.error&&r.data) backup.cloud.saleItems.push(...r.data); }
             }
         }
         return backup;
     }
 
-    async function exportPDVBackup() {
+    function localExportRows(type, backup) {
+        if(type==='customers') return (backup.local.customers||[]).map(c=>({id:c.id,name:c.name,cpf:c.cpf,phone:c.phone,type:c.type,monthly_limit:c.monthlyLimit??c.monthly_limit??0,monthly_used:c.monthlyUsed??c.monthly_used??0,monthly_usage_month:c.monthlyUsageMonth??c.monthly_usage_month??'',credit_balance:c.creditBalance??c.credit_balance??0,active:c.active!==false,created_at:c.createdAt||c.created_at||''}));
+        if(type==='products') return (backup.local.products||[]).map(p=>({id:p.id,name:p.name,category:p.category,price:p.price,icon:p.icon||'',stock:p.stock??'',controls_stock:p.controlsStock?'SIM':'NAO',active:p.active!==false}));
+        if(type==='users') return safeExportUsers(backup.local.users);
+        if(type==='sales') return (backup.local.sales||[]).map(s=>({id:s.id,date:s.date,operator_username:s.operatorUsername,operator_name:s.operatorName,customer:s.customer,customer_id:s.customerId,customer_type:s.customerType,subtotal:s.subtotal,discount:s.discount,total:s.total,pay_method:s.payMethod}));
+        if(type==='calculator') return Object.entries(backup.local.calculatorPrices||{}).map(([key,value])=>({chave:key,valor:value}));
+        return [];
+    }
+
+    async function exportPDVXLSX() {
         try {
-            const backup = await buildPDVBackup();
-            const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json;charset=utf-8'});
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `backup-pdv-grafica-${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-            setImportExportStatus('Backup JSON exportado com sucesso.');
-        } catch (err) {
-            console.error(err); setImportExportStatus('Não foi possível exportar: ' + (err.message || 'erro desconhecido'), 'error');
-        }
+            if(!window.XLSX) throw new Error('Biblioteca Excel não carregada. Verifique sua conexão e recarregue o sistema.');
+            const type=document.getElementById('pdv-export-xlsx-type')?.value||'backup';
+            const backup=await buildPDVBackup();
+            const wb=XLSX.utils.book_new();
+            const date=new Date().toISOString().slice(0,10);
+            if(type==='backup') {
+                appendXlsxSheet(wb,'Clientes',localExportRows('customers',backup));
+                appendXlsxSheet(wb,'Produtos',localExportRows('products',backup));
+                appendXlsxSheet(wb,'Operadores',localExportRows('users',backup));
+                appendXlsxSheet(wb,'Vendas',localExportRows('sales',backup));
+                appendXlsxSheet(wb,'Creditos',(backup.cloud.creditTransactions||[]).length ? backup.cloud.creditTransactions : (backup.local.customers||[]).filter(c=>(c.creditBalance??0)!==0).map(c=>({customer_id:c.id,customer_name:c.name,balance:c.creditBalance||0}))); 
+                appendXlsxSheet(wb,'Calculadoras',localExportRows('calculator',backup));
+                appendXlsxSheet(wb,'Itens_Venda',backup.cloud.saleItems||[]);
+                appendXlsxSheet(wb,'Nuvem_Produtos',backup.cloud.products||[]);
+                appendXlsxSheet(wb,'Nuvem_Clientes',backup.cloud.customers||[]);
+                appendXlsxSheet(wb,'Nuvem_Vendas',backup.cloud.sales||[]);
+                appendXlsxSheet(wb,'Nuvem_Operadores',backup.cloud.profiles||[]);
+                appendXlsxSheet(wb,'Nuvem_Creditos',backup.cloud.creditTransactions||[]);
+                XLSX.writeFile(wb,`backup-pdv-grafica-${date}.xlsx`);
+                setImportExportStatus('Backup Excel exportado com sucesso, com '+wb.SheetNames.length+' planilhas.');
+                return;
+            }
+            if(type==='credits') appendXlsxSheet(wb,'Creditos',backup.cloud.creditTransactions||[]);
+            else appendXlsxSheet(wb,{customers:'Clientes',products:'Produtos',users:'Operadores',sales:'Vendas',calculator:'Calculadoras'}[type],localExportRows(type,backup));
+            XLSX.writeFile(wb,`pdv-${type}-${date}.xlsx`);
+            setImportExportStatus('Arquivo Excel exportado com sucesso.');
+        } catch(err) { console.error(err); setImportExportStatus('Não foi possível exportar: '+(err.message||'erro desconhecido'),'error'); }
     }
 
-    function csvEscape(value) {
-        const s = value == null ? '' : String(value);
-        return /[";\n\r]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s;
-    }
-    function downloadCSV(filename, rows) {
-        if (!rows.length) { setImportExportStatus('Não há dados para exportar nesta lista.', 'error'); return; }
-        const headers = Object.keys(rows[0]);
-        const csv = '\uFEFF' + headers.join(';') + '\n' + rows.map(r => headers.map(h => csvEscape(r[h])).join(';')).join('\n');
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
-    }
-    async function exportPDVCSV() {
-        if (!requireAdmin()) return;
-        const type = document.getElementById('pdv-export-csv-type')?.value || 'customers';
-        let rows=[];
-        if (type==='customers') rows=(customers||[]).map(c=>({id:c.id,name:c.name,cpf:c.cpf,phone:c.phone,type:c.type,monthly_limit:c.monthlyLimit||0,monthly_used:c.monthlyUsed||0,monthly_usage_month:c.monthlyUsageMonth||'',credit_balance:c.creditBalance||0,active:c.active!==false}));
-        if (type==='products') rows=(catalog||[]).map(p=>({id:p.id,name:p.name,category:p.category,price:p.price,icon:p.icon||'',stock:p.stock ?? '',controls_stock:p.controlsStock?'SIM':'NAO',active:p.active!==false}));
-        if (type==='users') rows=safeExportUsers(users);
-        if (type==='sales') rows=(salesHistory||[]).map(s=>({id:s.id,date:s.date,operator_username:s.operatorUsername,operator_name:s.operatorName,customer:s.customer,customer_id:s.customerId,customer_type:s.customerType,subtotal:s.subtotal,discount:s.discount,total:s.total,pay_method:s.payMethod}));
-        downloadCSV(`pdv-${type}-${new Date().toISOString().slice(0,10)}.csv`, rows);
-        if (rows.length) setImportExportStatus(`CSV exportado: ${rows.length} registro(s).`);
-    }
-
-    function normalizeImportKey(v) { return String(v||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
-    function parseCSV(text) {
-        const firstLine = text.replace(/^\uFEFF/,'').split(/\r?\n/,1)[0] || '';
-        const delimiter = (firstLine.match(/;/g)||[]).length >= (firstLine.match(/,/g)||[]).length ? ';' : ',';
-        const rows=[]; let row=[], cell='', quoted=false;
-        for(let i=0;i<text.length;i++) {
-            const ch=text[i], next=text[i+1];
-            if(ch==='"' && quoted && next==='"'){cell+='"';i++;continue;}
-            if(ch==='"'){quoted=!quoted;continue;}
-            if(ch===delimiter && !quoted){row.push(cell);cell='';continue;}
-            if((ch==='\n'||ch==='\r') && !quoted){ if(ch==='\r'&&next==='\n')i++; row.push(cell);cell=''; if(row.some(x=>String(x).trim()!=='')) rows.push(row); row=[]; continue; }
-            cell+=ch;
-        }
-        if(cell!==''||row.length){row.push(cell);if(row.some(x=>String(x).trim()!==''))rows.push(row);}
-        if(rows.length<2) return [];
-        const headers=rows[0].map(normalizeImportKey);
-        return rows.slice(1).map(vals=>Object.fromEntries(headers.map((h,i)=>[h,String(vals[i]??'').trim()]))).filter(o=>Object.values(o).some(Boolean));
-    }
+    function normalizeImportKey(v) { return String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
     function numImport(v){ const n=Number(String(v??'').replace(/R\$\s?/gi,'').replace(/\./g,'').replace(',','.')); return Number.isFinite(n)?n:0; }
-    function boolImport(v, fallback=true){ const s=String(v??'').trim().toLowerCase(); if(!s)return fallback; return !['nao','não','false','0','inativo','inativa'].includes(s); }
+    function boolImport(v,fallback=true){const s=String(v??'').trim().toLowerCase();if(!s)return fallback;return !['nao','não','false','0','inativo','inativa'].includes(s);}
+    function sheetRows(workbook, names) {
+        const target=(names||[]).map(normalizeImportKey);
+        const entry=workbook.SheetNames.find(n=>target.includes(normalizeImportKey(n)));
+        return entry ? XLSX.utils.sheet_to_json(workbook.Sheets[entry],{defval:''}) : [];
+    }
 
-    function importCSVRows(rows, filename) {
-        const name=filename.toLowerCase();
-        const keys=Object.keys(rows[0]||{});
-        const isCustomer = /cliente|mensal|credito|credit/.test(name) || keys.includes('monthly_limit') || keys.includes('credit_balance') || keys.includes('cpf_cnpj');
-        const isProduct = /produto|servico|catalog/.test(name) || keys.includes('category') || keys.includes('price');
-        const isUser = /operador|usuario|usuari/.test(name) || keys.includes('username') || keys.includes('role');
-        if(isCustomer){
-            const imported=rows.map((r,i)=>({id:r.id||crypto.randomUUID?.()||`cli_import_${Date.now()}_${i}`,name:r.name||r.nome||'',cpf:r.cpf||r.cpf_cnpj||'',phone:r.phone||r.telefone||'',type:(r.type||r.tipo||'MENSALISTA').toUpperCase().replace(/\s+/g,'_'),monthlyLimit:numImport(r.monthly_limit||r.limite_mensal),monthlyUsed:numImport(r.monthly_used||r.usado_mensal),monthlyUsageMonth:r.monthly_usage_month||r.mes_uso||new Date().toISOString().slice(0,7),creditBalance:numImport(r.credit_balance||r.saldo_credito||r.credito_antecipado),active:boolImport(r.active,true),createdAt:r.created_at||new Date().toISOString()})).filter(c=>c.name);
-            const byId=new Map((customers||[]).map(c=>[String(c.id),c])); imported.forEach(c=>byId.set(String(c.id),c)); customers=[...byId.values()]; saveState(); renderAdminCustomers(); handleCartCustomerTypeChange(); return `Importados ${imported.length} cliente(s).`;
+    function importXlsxRows(rows, kind) {
+        const normalized=rows.map(r=>{const o={};Object.entries(r||{}).forEach(([k,v])=>o[normalizeImportKey(k)]=v);return o;}).filter(r=>Object.values(r).some(v=>String(v??'').trim()!==''));
+        if(kind==='customers') {
+            const imported=normalized.map((r,i)=>({id:r.id||crypto.randomUUID?.()||`cli_import_${Date.now()}_${i}`,name:r.name||r.nome||'',cpf:r.cpf||r.cpf_cnpj||'',phone:r.phone||r.telefone||'',type:(r.type||r.tipo||'MENSALISTA').toString().toUpperCase().replace(/\s+/g,'_'),monthlyLimit:numImport(r.monthly_limit||r.limite_mensal),monthlyUsed:numImport(r.monthly_used||r.usado_mensal),monthlyUsageMonth:r.monthly_usage_month||r.mes_uso||new Date().toISOString().slice(0,7),creditBalance:numImport(r.credit_balance||r.saldo_credito||r.credito_antecipado),active:boolImport(r.active,true),createdAt:r.created_at||new Date().toISOString()})).filter(c=>c.name);
+            const byId=new Map((customers||[]).map(c=>[String(c.id),c]));imported.forEach(c=>byId.set(String(c.id),c));customers=[...byId.values()];saveState();renderAdminCustomers();handleCartCustomerTypeChange();return `Importados ${imported.length} cliente(s).`;
         }
-        if(isProduct){
-            const imported=rows.map((r,i)=>({id:r.id||crypto.randomUUID?.()||`prod_import_${Date.now()}_${i}`,name:r.name||r.nome||'',category:(r.category||r.categoria||'OUTROS').toUpperCase(),price:numImport(r.price||r.preco||r.valor),icon:r.icon||'fa-box',stock:r.stock===''?undefined:numImport(r.stock||r.estoque),controlsStock:boolImport(r.controls_stock||r.controla_estoque,false),active:boolImport(r.active,true)})).filter(p=>p.name);
-            const byId=new Map((catalog||[]).map(p=>[String(p.id),p])); imported.forEach(p=>byId.set(String(p.id),p)); catalog=[...byId.values()]; saveState(); renderAdminCatalog(); renderCatalog(); return `Importados ${imported.length} produto(s)/serviço(s).`;
+        if(kind==='products') {
+            const imported=normalized.map((r,i)=>({id:r.id||crypto.randomUUID?.()||`prod_import_${Date.now()}_${i}`,name:r.name||r.nome||'',category:(r.category||r.categoria||'OUTROS').toString().toUpperCase(),price:numImport(r.price||r.preco||r.valor),icon:r.icon||'fa-box',stock:r.stock===''?undefined:numImport(r.stock||r.estoque),controlsStock:boolImport(r.controls_stock||r.controla_estoque,false),active:boolImport(r.active,true)})).filter(p=>p.name);
+            const byId=new Map((catalog||[]).map(p=>[String(p.id),p]));imported.forEach(p=>byId.set(String(p.id),p));catalog=[...byId.values()];saveState();renderAdminCatalog();renderCatalog();return `Importados ${imported.length} produto(s)/serviço(s).`;
         }
-        if(isUser){
-            const imported=safeExportUsers(rows.map((r,i)=>({id:r.id||`usr_import_${Date.now()}_${i}`,fullname:r.fullname||r.full_name||r.nome||r.name||'',username:r.username||r.usuario||'',email:r.email||'',role:(r.role||r.perfil||'OPERATOR').toUpperCase(),active:boolImport(r.active,true)})).filter(u=>u.username));
-            const byId=new Map((users||[]).map(u=>[String(u.id),u])); imported.forEach(u=>byId.set(String(u.id),u)); users=[...byId.values()]; localStorage.setItem('pdv_users',JSON.stringify(users)); renderUsersList(); renderUsersTable(); return `Importados ${imported.length} operador(es)/usuário(s).`;
+        if(kind==='users') {
+            const imported=safeExportUsers(normalized.map((r,i)=>({id:r.id||`usr_import_${Date.now()}_${i}`,fullname:r.fullname||r.full_name||r.nome||r.name||'',username:r.username||r.usuario||'',email:r.email||'',role:(r.role||r.perfil||'OPERATOR').toString().toUpperCase(),active:boolImport(r.active,true)})).filter(u=>u.username));
+            const byId=new Map((users||[]).map(u=>[String(u.id),u]));imported.forEach(u=>byId.set(String(u.id),u));users=[...byId.values()];localStorage.setItem('pdv_users',JSON.stringify(users));renderUsersList();renderUsersTable();return `Importados ${imported.length} operador(es)/usuário(s).`;
         }
-        throw new Error('Não consegui identificar o tipo da lista CSV. Use no nome do arquivo: clientes, produtos ou operadores.');
+        throw new Error('Planilha não reconhecida. Use as abas Clientes, Produtos ou Operadores.');
     }
 
     async function handlePDVImportFile(event) {
-        if (!requireAdmin()) return;
-        const file=event.target.files?.[0]; if(!file)return;
+        if(!requireAdmin())return;
+        const file=event.target.files?.[0];if(!file)return;
         try {
-            const text=await file.text();
-            if(file.name.toLowerCase().endsWith('.csv')) {
-                const rows=parseCSV(text); if(!rows.length) throw new Error('CSV vazio ou inválido.');
-                setImportExportStatus(importCSVRows(rows,file.name));
-            } else {
-                const data=JSON.parse(text);
-                if(data?.format!=='PDV-GRAFICA-BACKUP') throw new Error('Este arquivo não é um backup do PDV Gráfica.');
-                if(!confirm('Importar este backup substituirá os dados locais atuais de produtos, clientes, vendas, usuários e preços. Deseja continuar?')) return;
-                const local=data.local||data;
-                if(Array.isArray(local.products)) catalog=local.products;
-                if(Array.isArray(local.customers)) customers=local.customers;
-                if(Array.isArray(local.sales)) salesHistory=local.sales;
-                if(local.calculatorPrices && typeof local.calculatorPrices==='object') calcPrices={...DEFAULT_CALC_PRICES,...local.calculatorPrices};
-                if(Array.isArray(local.users)) { users=safeExportUsers(local.users); localStorage.setItem('pdv_users',JSON.stringify(users)); }
-                saveState(); localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));
-                renderCatalog(); renderCart(); renderSalesHistory(); renderAdminCatalog(); renderUsersList(); renderUsersTable(); renderAdminCustomers();
-                setImportExportStatus(`Backup importado com sucesso: ${(catalog||[]).length} produtos, ${(customers||[]).length} clientes e ${(salesHistory||[]).length} vendas. Os operadores foram importados sem senhas.`);
-            }
-        } catch(err) { console.error('Importação PDV:',err); setImportExportStatus('Falha na importação: '+(err.message||'arquivo inválido'),'error'); }
-        finally { event.target.value=''; }
+            if(!/\.xlsx$/i.test(file.name)) throw new Error('Selecione um arquivo .xlsx.');
+            if(!window.XLSX) throw new Error('Biblioteca Excel não carregada. Recarregue o sistema.');
+            const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:false});
+            const names=wb.SheetNames.map(normalizeImportKey);
+            const hasBackup=['clientes','produtos','operadores','vendas'].every(n=>names.includes(n));
+            if(hasBackup) {
+                if(!confirm('Importar este backup Excel substituirá os dados locais atuais de produtos, clientes, vendas, usuários e preços. Deseja continuar?'))return;
+                const result=[];
+                const customerRows=sheetRows(wb,['Clientes']);if(customerRows.length)result.push(importXlsxRows(customerRows,'customers'));
+                const productRows=sheetRows(wb,['Produtos']);if(productRows.length)result.push(importXlsxRows(productRows,'products'));
+                const userRows=sheetRows(wb,['Operadores']);if(userRows.length)result.push(importXlsxRows(userRows,'users'));
+                const salesRows=sheetRows(wb,['Vendas']);if(salesRows.length){salesHistory=salesRows.map(r=>{const o={};Object.entries(r).forEach(([k,v])=>o[normalizeImportKey(k)]=v);return {id:o.id||crypto.randomUUID?.(),date:o.date||'',operatorUsername:o.operator_username||'',operatorName:o.operator_name||'',customer:o.customer||'',customerId:o.customer_id||null,customerType:o.customer_type||'',subtotal:numImport(o.subtotal),discount:numImport(o.discount),total:numImport(o.total),payMethod:o.pay_method||''};});saveState();renderSalesHistory();result.push(`Importadas ${salesHistory.length} vendas`);}
+                const calcRows=sheetRows(wb,['Calculadoras']);if(calcRows.length){const cp={...DEFAULT_CALC_PRICES};calcRows.forEach(r=>{const k=r.chave||r.key;if(k)cp[k]=numImport(r.valor??r.value);});calcPrices=cp;localStorage.setItem('pdv_calc_prices',JSON.stringify(calcPrices));}
+                saveState();renderCatalog();renderCart();renderAdminCatalog();renderUsersList();renderUsersTable();renderAdminCustomers();
+                setImportExportStatus('Backup Excel importado com sucesso. '+result.join(' • ')+' Os operadores foram importados sem senhas.');
+            } else if(names.includes('clientes')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Clientes']),'customers'));
+            else if(names.includes('produtos')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Produtos']),'products'));
+            else if(names.includes('operadores')) setImportExportStatus(importXlsxRows(sheetRows(wb,['Operadores']),'users'));
+            else throw new Error('Não encontrei uma planilha reconhecida. Use Clientes, Produtos ou Operadores, ou o Backup completo do PDV.');
+        } catch(err){console.error('Importação XLSX:',err);setImportExportStatus('Falha na importação: '+(err.message||'arquivo inválido'),'error');}
+        finally{event.target.value='';}
     }
 
     function switchAdminSubTab(subtab) {
