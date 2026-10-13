@@ -2341,21 +2341,66 @@
         return sheet ? XLSX.utils.sheet_to_json(workbook.Sheets[sheet],{defval:''}) : [];
     }
 
-    function detectImportKind(workbook) {
-        const order=['customers','products','users','sales','credits','calculator'];
-        for(const kind of order) if(findImportSheet(workbook,kind)) return kind;
+    function headerKindFromRow(header) {
+        const h = new Set((header || []).map(normalizeImportKey).filter(Boolean));
+        const has = (...keys) => keys.some(k => h.has(normalizeImportKey(k)));
 
-        // Também reconhece uma planilha com nome genérico (Planilha1, Sheet1 etc.)
-        // pelo conteúdo da primeira linha.
-        for(const name of workbook.SheetNames){
-            const rows=XLSX.utils.sheet_to_json(workbook.Sheets[name],{defval:'',header:1});
-            const header=(rows[0]||[]).map(normalizeImportKey);
-            if(header.some(k=>['nome','name','cpf','cpf_cnpj','telefone','phone'].includes(k))) return 'customers';
-            if(header.some(k=>['preco','price','valor'].includes(k)) && header.some(k=>['produto','name','nome'].includes(k))) return 'products';
-            if(header.some(k=>['username','usuario','email'].includes(k)) && header.some(k=>['role','perfil'].includes(k))) return 'users';
-            if(header.some(k=>['total','subtotal','pay_method','forma_pagamento'].includes(k))) return 'sales';
+        // Mais específicos primeiro para evitar que uma coluna "nome" faça
+        // uma planilha de produtos ser confundida com clientes.
+        if ((has('username','usuario','login') && has('role','perfil')) ||
+            (has('username','usuario','login') && has('email'))) return 'users';
+        if ((has('category','categoria') && has('price','preco','valor')) ||
+            (has('price','preco') && has('name','nome','produto','servico'))) return 'products';
+        if (has('total') && (has('date','data') || has('pay_method','forma_pagamento','pagamento'))) return 'sales';
+        if (has('customer_id','cliente_id') && has('balance','saldo','valor') ) return 'credits';
+        if (has('chave','key') && has('valor','value','preco')) return 'calculator';
+        if (has('cpf','cpf_cnpj','telefone','phone') ||
+            has('monthly_limit','limite_mensal','monthly_used','credit_balance','saldo_credito') ||
+            (has('name','nome') && has('type','tipo') && has('phone','telefone'))) return 'customers';
+        return null;
+    }
+
+    function detectImportTarget(workbook) {
+        const order=['customers','products','users','sales','credits','calculator'];
+
+        // 1) Primeiro, respeita nomes conhecidos de abas.
+        for(const kind of order) {
+            const sheet=findImportSheet(workbook,kind);
+            if(sheet) return {kind, sheet, headerRow:0};
+        }
+
+        // 2) Para "Worksheet", "Planilha1", "Sheet1" etc., procura o cabeçalho
+        // nas primeiras linhas. Isso cobre arquivos que têm título, logo ou linhas
+        // vazias antes da tabela.
+        for(const name of workbook.SheetNames || []) {
+            const matrix=XLSX.utils.sheet_to_json(workbook.Sheets[name],{defval:'',header:1,blankrows:false});
+            const max=Math.min(matrix.length,30);
+            for(let i=0;i<max;i++) {
+                const kind=headerKindFromRow(matrix[i]);
+                if(kind) return {kind, sheet:name, headerRow:i};
+            }
         }
         return null;
+    }
+
+    function rowsFromDetectedTarget(workbook,target) {
+        if(!target) return [];
+        const ws=workbook.Sheets[target.sheet];
+        if(target.headerRow===0) return XLSX.utils.sheet_to_json(ws,{defval:''});
+        const matrix=XLSX.utils.sheet_to_json(ws,{defval:'',header:1,blankrows:false});
+        const header=(matrix[target.headerRow]||[]).map(v=>String(v??''));
+        return matrix.slice(target.headerRow+1).map(values=>{
+            const row={};
+            header.forEach((h,i)=>{
+                const key=String(h||'').trim();
+                if(key) row[key]=values[i] ?? '';
+            });
+            return row;
+        }).filter(row=>Object.values(row).some(v=>String(v??'').trim()!==''));
+    }
+
+    function detectImportKind(workbook) {
+        return detectImportTarget(workbook)?.kind || null;
     }
 
     function importXlsxRows(rows, kind) {
@@ -2447,17 +2492,13 @@
                 saveState();renderCatalog();renderCart();renderAdminCatalog();renderUsersList();renderUsersTable();renderAdminCustomers();
                 setImportExportStatus('Backup Excel importado com sucesso. '+result.join(' • ')+' Os operadores foram importados sem senhas.');
             } else {
-                const kind=detectImportKind(wb);
-                if(!kind){
-                    throw new Error('Não encontrei uma planilha reconhecida. Abas encontradas: '+(sheetNames.join(', ')||'nenhuma')+'. Use o backup gerado pelo PDV ou uma planilha Clientes, Produtos ou Operadores.');
+                const target=detectImportTarget(wb);
+                const kind=target?.kind;
+                if(!target){
+                    throw new Error('Não encontrei uma tabela reconhecida. Abas encontradas: '+(sheetNames.join(', ')||'nenhuma')+'. A primeira linha da tabela deve conter colunas como Nome/CPF/Telefone (clientes), Nome/Preço/Categoria (produtos) ou Usuário/Perfil/E-mail (operadores).');
                 }
-                const rows=rowsForImportKind(wb,kind);
-                // Para planilha genérica (Planilha1/Sheet1), detectImportKind encontrou pelo conteúdo.
-                const finalRows=rows.length ? rows : (()=> {
-                    const sheet=sheetNames.find(n=>XLSX.utils.sheet_to_json(wb.Sheets[n],{defval:'',header:1}).length);
-                    return sheet ? XLSX.utils.sheet_to_json(wb.Sheets[sheet],{defval:''}) : [];
-                })();
-                if(!finalRows.length) throw new Error('A planilha está vazia.');
+                const finalRows=rowsFromDetectedTarget(wb,target);
+                if(!finalRows.length) throw new Error('A planilha está vazia ou não possui registros abaixo do cabeçalho.');
 
                 if(kind==='customers') setImportExportStatus(importXlsxRows(finalRows,'customers'));
                 else if(kind==='products') setImportExportStatus(importXlsxRows(finalRows,'products'));
