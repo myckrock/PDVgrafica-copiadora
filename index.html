@@ -2309,7 +2309,20 @@
     }
 
     function normalizeImportKey(v) { return String(v??'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,''); }
-    function numImport(v){ const n=Number(String(v??'').replace(/R\$\s?/gi,'').replace(/\./g,'').replace(',','.')); return Number.isFinite(n)?n:0; }
+    function numImport(v){
+        if(v===null||v===undefined||v==='') return 0;
+        if(typeof v==='number') return Number.isFinite(v)?v:0;
+        let s=String(v).trim().replace(/R\$\s?/gi,'').replace(/%/g,'');
+        if(!s) return 0;
+        // Aceita números brasileiros (1.234,56), americanos (1234.56) e simples (5,50).
+        const comma=s.includes(','), dot=s.includes('.');
+        if(comma && dot){
+            if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.');
+            else s=s.replace(/,/g,'');
+        } else if(comma){ s=s.replace(/,/g,'.'); }
+        const n=Number(s.replace(/[^0-9+\-.]/g,''));
+        return Number.isFinite(n)?n:0;
+    }
     function boolImport(v,fallback=true){const s=String(v??'').trim().toLowerCase();if(!s)return fallback;return !['nao','não','false','0','inativo','inativa'].includes(s);}
     function sheetRows(workbook, names) {
         const target=(names||[]).map(normalizeImportKey);
@@ -2349,8 +2362,9 @@
         // uma planilha de produtos ser confundida com clientes.
         if ((has('username','usuario','login') && has('role','perfil')) ||
             (has('username','usuario','login') && has('email'))) return 'users';
-        if ((has('category','categoria') && has('price','preco','valor')) ||
-            (has('price','preco') && has('name','nome','produto','servico'))) return 'products';
+        if ((has('category','categoria','grupo') && has('price','preco','valor','valor_varejo')) ||
+            (has('price','preco','valor_varejo') && has('name','nome','produto','servico')) ||
+            (has('produto') && has('grupo') && has('valor_varejo'))) return 'products';
         if (has('total') && (has('date','data') || has('pay_method','forma_pagamento','pagamento'))) return 'sales';
         if (has('customer_id','cliente_id') && has('balance','saldo','valor') ) return 'credits';
         if (has('chave','key') && has('valor','value','preco')) return 'calculator';
@@ -2410,14 +2424,23 @@
             const byId=new Map((customers||[]).map(c=>[String(c.id),c]));imported.forEach(c=>byId.set(String(c.id),c));customers=[...byId.values()];saveState();renderAdminCustomers();handleCartCustomerTypeChange();return `Importados ${imported.length} cliente(s).`;
         }
         if(kind==='products') {
-            const imported=normalized.map((r,i)=>({id:r.id||crypto.randomUUID?.()||`prod_import_${Date.now()}_${i}`,name:r.name||r.nome||'',category:(r.category||r.categoria||'OUTROS').toString().toUpperCase(),price:numImport(r.price||r.preco||r.valor),icon:r.icon||'fa-box',stock:r.stock===''?undefined:numImport(r.stock||r.estoque),controlsStock:boolImport(r.controls_stock||r.controla_estoque,false),active:boolImport(r.active,true)})).filter(p=>p.name);
+            const imported=normalized.map((r,i)=>({
+                id:r.id||r.codigo||r.codigo_de_barras||crypto.randomUUID?.()||`prod_import_${Date.now()}_${i}`,
+                name:r.name||r.nome||r.produto||r.descricao||'',
+                category:(r.category||r.categoria||r.grupo||'OUTROS').toString().toUpperCase(),
+                price:numImport(r.price??r.preco??r.valor??r.valor_varejo??r.valor_varejo),
+                icon:r.icon||'fa-box',
+                stock:(r.stock!==undefined&&r.stock!=='')?numImport(r.stock):(r.estoque!==undefined&&r.estoque!==''?numImport(r.estoque):(r.estoque_atual!==undefined&&r.estoque_atual!==''?numImport(r.estoque_atual):undefined)),
+                controlsStock:boolImport(r.controls_stock??r.controla_estoque??(r.estoque_atual!==undefined),false),
+                active:boolImport(r.active??r.ativo,true)
+            })).filter(p=>p.name);
             const byId=new Map((catalog||[]).map(p=>[String(p.id),p]));imported.forEach(p=>byId.set(String(p.id),p));catalog=[...byId.values()];saveState();renderAdminCatalog();renderCatalog();return `Importados ${imported.length} produto(s)/serviço(s).`;
         }
         if(kind==='users') {
             const imported=safeExportUsers(normalized.map((r,i)=>({id:r.id||`usr_import_${Date.now()}_${i}`,fullname:r.fullname||r.full_name||r.nome||r.name||'',username:r.username||r.usuario||'',email:r.email||'',role:(r.role||r.perfil||'OPERATOR').toString().toUpperCase(),active:boolImport(r.active,true)})).filter(u=>u.username));
             const byId=new Map((users||[]).map(u=>[String(u.id),u]));imported.forEach(u=>byId.set(String(u.id),u));users=[...byId.values()];localStorage.setItem('pdv_users',JSON.stringify(users));renderUsersList();renderUsersTable();return `Importados ${imported.length} operador(es)/usuário(s).`;
         }
-        throw new Error('Planilha não reconhecida. Use as abas Clientes, Produtos ou Operadores.');
+        throw new Error('Planilha não reconhecida. Para produtos, use as colunas Produto, Grupo e Valor Varejo; também aceitamos Nome, Categoria e Preço.');
     }
 
     async function handlePDVImportFile(event) {
@@ -2495,7 +2518,7 @@
                 const target=detectImportTarget(wb);
                 const kind=target?.kind;
                 if(!target){
-                    throw new Error('Não encontrei uma tabela reconhecida. Abas encontradas: '+(sheetNames.join(', ')||'nenhuma')+'. A primeira linha da tabela deve conter colunas como Nome/CPF/Telefone (clientes), Nome/Preço/Categoria (produtos) ou Usuário/Perfil/E-mail (operadores).');
+                    throw new Error('Não encontrei uma tabela reconhecida. Abas encontradas: '+(sheetNames.join(', ')||'nenhuma')+'. Para produtos, use Produto/Grupo/Valor Varejo; para clientes, Nome/CPF/Telefone; para operadores, Usuário/Perfil/E-mail.');
                 }
                 const finalRows=rowsFromDetectedTarget(wb,target);
                 if(!finalRows.length) throw new Error('A planilha está vazia ou não possui registros abaixo do cabeçalho.');
