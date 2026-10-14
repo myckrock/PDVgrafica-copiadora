@@ -27,8 +27,24 @@
       return cloudReady;
     } catch(e) { console.error('PDV Cloud init',e); setStatus('Erro de conexão Supabase','error'); return false; }
   }
-  const productToDb = p => ({id:String(p.id),name:String(p.name||''),category:String(p.category||'OUTROS'),price:Number(p.price)||0,icon:p.icon||null,stock:p.stock==null?null:Number(p.stock),controls_stock:!!p.controlsStock,active:p.active!==false,updated_at:new Date().toISOString()});
-  const productFromDb = p => ({id:p.id,name:p.name,category:p.category,price:Number(p.price)||0,icon:p.icon||'fa-box',stock:p.stock==null?undefined:Number(p.stock),controlsStock:!!p.controls_stock,active:p.active!==false});
+  // Mantém as categorias dos produtos em um padrão único. Isso evita que
+  // valores vindos do Excel (ex.: "Conveniência", "Com. Visual") criem
+  // categorias diferentes das usadas pelos filtros do PDV.
+  const normalizeProductCategory = value => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return 'OUTROS';
+    const key = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const compact = key.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    if (compact.includes('IMPRESS') || compact.includes('COPIA')) return 'IMPRESSAO';
+    if (compact.includes('VISUAL') || compact.includes('COM_VISUAL') || compact.includes('COMUNICACAO')) return 'COMUNICACAO_VISUAL';
+    if (compact.includes('ACABAMENTO') || compact.includes('PLASTIFIC')) return 'ACABAMENTO';
+    if (compact.includes('PAPELARIA')) return 'PAPELARIA';
+    if (compact.includes('CONVENI')) return 'CONVENIENCIA';
+    if (['IMPRESSAO','COMUNICACAO_VISUAL','ACABAMENTO','PAPELARIA','CONVENIENCIA'].includes(compact)) return compact;
+    return compact || 'OUTROS';
+  };
+  const productToDb = p => ({id:String(p.id),name:String(p.name||''),category:normalizeProductCategory(p.category),price:Number(p.price)||0,icon:p.icon||null,stock:p.stock==null?null:Number(p.stock),controls_stock:!!p.controlsStock,active:p.active!==false,updated_at:new Date().toISOString()});
+  const productFromDb = p => ({id:p.id,name:p.name,category:normalizeProductCategory(p.category),price:Number(p.price)||0,icon:p.icon||'fa-box',stock:p.stock==null?undefined:Number(p.stock),controlsStock:!!p.controls_stock,active:p.active!==false});
   const customerToDb = c => ({id:String(c.id),name:String(c.name||''),cpf:c.cpf||null,phone:c.phone||null,type:c.type,monthly_limit:Number(c.monthlyLimit)||0,monthly_used:Number(c.monthlyUsed)||0,monthly_usage_month:c.monthlyUsageMonth||null,credit_balance:Number(c.creditBalance)||0,active:c.active!==false,updated_at:new Date().toISOString()});
   const customerFromDb = c => ({id:c.id,name:c.name,cpf:c.cpf||'',phone:c.phone||'',type:c.type,monthlyLimit:Number(c.monthly_limit)||0,monthlyUsed:Number(c.monthly_used)||0,monthlyUsageMonth:c.monthly_usage_month||null,creditBalance:Number(c.credit_balance)||0,active:c.active!==false,createdAt:c.created_at});
   // Preços centrais das calculadoras: um único registro compartilhado no Supabase.
@@ -158,36 +174,12 @@
     setStatus(data.duplicate?'Banco online • venda já registrada':'Banco online • venda e saldo atualizados','online');
     return {duplicate:!!data.duplicate,customer:data.customer?customerFromDb(data.customer):null};
   }
-  async function updateOwnAdminAccount({fullname,username,email,password}) {
-    if (!client || !cloudReady) throw new Error('Entre novamente no Supabase antes de alterar a conta.');
-    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação da conta');
-    if (!user) throw new Error('Sessão não autenticada.');
-    const {data:profile,error:pe}=await client.from('profiles').select('id,role,active').eq('id',user.id).single();
-    fail(pe,'Verificação do administrador');
-    if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente o administrador ativo pode alterar a própria conta.');
-    const {data:profileData,error:rpcError}=await client.rpc('pdv_update_own_admin_profile',{p_full_name:fullname,p_username:username});
-    fail(rpcError,'Atualização do perfil');
-    if (!profileData?.id || profileData.id!==user.id) throw new Error('O Supabase não confirmou a atualização do perfil.');
-    const authChanges={};
-    const emailChanged=String(email).toLowerCase()!==String(user.email||'').toLowerCase();
-    if(emailChanged) authChanges.email=email;
-    if(password) authChanges.password=password;
-    if(Object.keys(authChanges).length) {
-      const authOptions=emailChanged ? {emailRedirectTo:window.location.origin+window.location.pathname} : undefined;
-      const {data,error}=await client.auth.updateUser(authChanges,authOptions);
-      fail(error,'Atualização das credenciais');
-      if(!data?.user) throw new Error('O Supabase não confirmou a atualização das credenciais.');
-    }
-    setStatus('Banco online • conta atualizada','online');
-    return {full_name:profileData.full_name,username:profileData.username,email:user.email,pendingEmail:emailChanged?email:null,emailChanged};
-  }
-
   async function showStatus(){
     if(!client) await init();
     if(!client){alert('Confira a URL, a chave pública e o carregamento da biblioteca Supabase.');return;}
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,updateOwnAdminAccount,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
