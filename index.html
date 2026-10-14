@@ -2513,7 +2513,15 @@
                 if(creditRows.length) result.push(`Créditos encontrados: ${creditRows.length} registro(s)`);
 
                 saveState();renderCatalog();renderCart();renderAdminCatalog();renderUsersList();renderUsersTable();renderAdminCustomers();
-                setImportExportStatus('Backup Excel importado com sucesso. '+result.join(' • ')+' Os operadores foram importados sem senhas.');
+                // IMPORTANTE: a importação primeiro atualiza o estado local e, em seguida,
+                // grava produtos e clientes no Supabase. Assim os dados não desaparecem
+                // quando a página é recarregada.
+                if (window.PDVCloud?.ready && typeof window.PDVCloud.syncData === 'function') {
+                    await window.PDVCloud.syncData();
+                } else {
+                    throw new Error('Supabase não está conectado. Os dados foram carregados localmente, mas não foram gravados no banco. Faça login e tente importar novamente.');
+                }
+                setImportExportStatus('Backup Excel importado e sincronizado com o banco. '+result.join(' • ')+' Os operadores foram importados sem senhas.');
             } else {
                 const target=detectImportTarget(wb);
                 const kind=target?.kind;
@@ -2523,10 +2531,24 @@
                 const finalRows=rowsFromDetectedTarget(wb,target);
                 if(!finalRows.length) throw new Error('A planilha está vazia ou não possui registros abaixo do cabeçalho.');
 
-                if(kind==='customers') setImportExportStatus(importXlsxRows(finalRows,'customers'));
-                else if(kind==='products') setImportExportStatus(importXlsxRows(finalRows,'products'));
-                else if(kind==='users') setImportExportStatus(importXlsxRows(finalRows,'users'));
+                let importMessage='';
+                if(kind==='customers') importMessage=importXlsxRows(finalRows,'customers');
+                else if(kind==='products') importMessage=importXlsxRows(finalRows,'products');
+                else if(kind==='users') importMessage=importXlsxRows(finalRows,'users');
                 else throw new Error('Importação individual disponível para Clientes, Produtos e Operadores.');
+
+                // Persiste no Supabase imediatamente. Antes disso os dados ficavam
+                // apenas no localStorage e eram perdidos/sobrescritos após F5.
+                if (kind==='customers' || kind==='products') {
+                    if (window.PDVCloud?.ready && typeof window.PDVCloud.syncData === 'function') {
+                        await window.PDVCloud.syncData();
+                        setImportExportStatus(importMessage+' Banco de dados sincronizado com sucesso.');
+                    } else {
+                        throw new Error('Supabase não está conectado. Os dados foram carregados localmente, mas não foram gravados no banco. Faça login e tente importar novamente.');
+                    }
+                } else {
+                    setImportExportStatus(importMessage+' Os operadores são dados locais de cadastro e não criam contas de autenticação automaticamente.');
+                }
             }
         } catch(err){
             console.error('Importação XLSX:',err);
