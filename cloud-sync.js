@@ -27,24 +27,8 @@
       return cloudReady;
     } catch(e) { console.error('PDV Cloud init',e); setStatus('Erro de conexão Supabase','error'); return false; }
   }
-  // Mantém as categorias dos produtos em um padrão único. Isso evita que
-  // valores vindos do Excel (ex.: "Conveniência", "Com. Visual") criem
-  // categorias diferentes das usadas pelos filtros do PDV.
-  const normalizeProductCategory = value => {
-    const raw = String(value ?? '').trim();
-    if (!raw) return 'OUTROS';
-    const key = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-    const compact = key.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-    if (compact.includes('IMPRESS') || compact.includes('COPIA')) return 'IMPRESSAO';
-    if (compact.includes('VISUAL') || compact.includes('COM_VISUAL') || compact.includes('COMUNICACAO')) return 'COMUNICACAO_VISUAL';
-    if (compact.includes('ACABAMENTO') || compact.includes('PLASTIFIC')) return 'ACABAMENTO';
-    if (compact.includes('PAPELARIA')) return 'PAPELARIA';
-    if (compact.includes('CONVENI')) return 'CONVENIENCIA';
-    if (['IMPRESSAO','COMUNICACAO_VISUAL','ACABAMENTO','PAPELARIA','CONVENIENCIA'].includes(compact)) return compact;
-    return compact || 'OUTROS';
-  };
-  const productToDb = p => ({id:String(p.id),name:String(p.name||''),category:normalizeProductCategory(p.category),price:Number(p.price)||0,icon:p.icon||null,stock:p.stock==null?null:Number(p.stock),controls_stock:!!p.controlsStock,active:p.active!==false,updated_at:new Date().toISOString()});
-  const productFromDb = p => ({id:p.id,name:p.name,category:normalizeProductCategory(p.category),price:Number(p.price)||0,icon:p.icon||'fa-box',stock:p.stock==null?undefined:Number(p.stock),controlsStock:!!p.controls_stock,active:p.active!==false});
+  const productToDb = p => ({id:String(p.id),name:String(p.name||''),category:String(p.category||'OUTROS'),price:Number(p.price)||0,icon:p.icon||null,stock:p.stock==null?null:Number(p.stock),controls_stock:!!p.controlsStock,active:p.active!==false,updated_at:new Date().toISOString()});
+  const productFromDb = p => ({id:p.id,name:p.name,category:p.category,price:Number(p.price)||0,icon:p.icon||'fa-box',stock:p.stock==null?undefined:Number(p.stock),controlsStock:!!p.controls_stock,active:p.active!==false});
   const customerToDb = c => ({id:String(c.id),name:String(c.name||''),cpf:c.cpf||null,phone:c.phone||null,type:c.type,monthly_limit:Number(c.monthlyLimit)||0,monthly_used:Number(c.monthlyUsed)||0,monthly_usage_month:c.monthlyUsageMonth||null,credit_balance:Number(c.creditBalance)||0,active:c.active!==false,updated_at:new Date().toISOString()});
   const customerFromDb = c => ({id:c.id,name:c.name,cpf:c.cpf||'',phone:c.phone||'',type:c.type,monthlyLimit:Number(c.monthly_limit)||0,monthlyUsed:Number(c.monthly_used)||0,monthlyUsageMonth:c.monthly_usage_month||null,creditBalance:Number(c.credit_balance)||0,active:c.active!==false,createdAt:c.created_at});
   // Preços centrais das calculadoras: um único registro compartilhado no Supabase.
@@ -68,7 +52,6 @@
   async function saveCalcPrices(prices) {
     if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar preços.');
     const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação dos preços');
-    if (!user) throw new Error('Sessão Supabase não autenticada.');
     const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single(); fail(pe,'Verificação do administrador');
     if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar os preços.');
     const safePrices={};
@@ -105,10 +88,31 @@
     cloudReady=true; setStatus('Banco online • dados carregados','online');
   }
   // Salva um único produto imediatamente no Supabase e só confirma após retorno do banco.
+  async function ensureSession(action='Autenticação') {
+    if (!client) await init();
+    if (!client) throw new Error('Supabase não foi inicializado.');
+    let {data:{session},error}=await client.auth.getSession();
+    if (error) throw new Error(`${action}: ${error.message || 'erro ao verificar a sessão'}`);
+    if (!session) {
+      try {
+        const refreshed=await client.auth.refreshSession();
+        session=refreshed?.data?.session || null;
+        if (refreshed?.error) console.warn('Falha ao renovar sessão:', refreshed.error);
+      } catch (e) {
+        console.warn('Falha ao renovar sessão Supabase:', e);
+      }
+    }
+    if (!session?.user) {
+      cloudReady=false;
+      setStatus('Sessão expirada • faça login novamente','error');
+      throw new Error(`${action}: sessão Supabase ausente. Faça login novamente no PDV.`);
+    }
+    cloudReady=true;
+    return session.user;
+  }
+
   async function saveProduct(product) {
-    if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar produtos.');
-    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação do produto');
-    if (!user) throw new Error('Sessão Supabase não autenticada.');
+    const user=await ensureSession('Autenticação do produto');
     const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single();
     fail(pe,'Verificação do administrador');
     if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar produtos.');
@@ -180,6 +184,6 @@
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,ensureSession,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
