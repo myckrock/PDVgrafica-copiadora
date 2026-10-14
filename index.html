@@ -1139,7 +1139,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="cloud-sync.js?v=admin-account-1"></script>
+    <script src="cloud-sync.js?v=auth-refresh-2"></script>
 
     <script>
     /* APPLICATION STATE & SEEDED DATA */
@@ -1761,35 +1761,7 @@
     // Catalog & Cart Management
     let activeCategoryFilter = 'ALL';
 
-    // Converte as categorias vindas do Excel/Supabase para os mesmos IDs
-    // usados pelos filtros do catálogo. Aceita acentos, abreviações e nomes
-    // como "Impressões", "Com. Visual", "Conveniência", etc.
-    function normalizeProductCategory(value) {
-        const raw = String(value ?? '').trim();
-        if (!raw) return 'OUTROS';
-        const key = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-        const compact = key.replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-        if (compact === 'ALL' || compact === 'TODOS') return 'OUTROS';
-        if (compact.includes('IMPRESS') || compact.includes('COPIA')) return 'IMPRESSAO';
-        if (compact.includes('VISUAL') || compact.includes('COM_VISUAL') || compact.includes('COMUNICACAO')) return 'COMUNICACAO_VISUAL';
-        if (compact.includes('ACABAMENTO') || compact.includes('PLASTIFIC')) return 'ACABAMENTO';
-        if (compact.includes('PAPELARIA')) return 'PAPELARIA';
-        if (compact.includes('CONVENI')) return 'CONVENIENCIA';
-        if (['IMPRESSAO','COMUNICACAO_VISUAL','ACABAMENTO','PAPELARIA','CONVENIENCIA'].includes(compact)) return compact;
-        return compact || 'OUTROS';
-    }
-
-    function normalizeCatalogCategories() {
-        let changed = false;
-        (catalog || []).forEach(p => {
-            const normalized = normalizeProductCategory(p.category);
-            if (p.category !== normalized) { p.category = normalized; changed = true; }
-        });
-        if (changed) localStorage.setItem('pdv_catalog', JSON.stringify(catalog));
-    }
-
     function renderCatalog() {
-        normalizeCatalogCategories();
         const grid = document.getElementById('catalog-grid');
         const filterContainer = document.getElementById('catalog-category-filter');
         const search = document.getElementById('catalog-search').value.toLowerCase();
@@ -1811,7 +1783,7 @@
         `).join('');
 
         const filtered = catalog.filter(p => {
-            const matchesCat = activeCategoryFilter === 'ALL' || normalizeProductCategory(p.category) === activeCategoryFilter;
+            const matchesCat = activeCategoryFilter === 'ALL' || p.category === activeCategoryFilter;
             const matchesSearch = p.name.toLowerCase().includes(search);
             return matchesCat && matchesSearch;
         });
@@ -2455,7 +2427,7 @@
             const imported=normalized.map((r,i)=>({
                 id:r.id||r.codigo||r.codigo_de_barras||crypto.randomUUID?.()||`prod_import_${Date.now()}_${i}`,
                 name:r.name||r.nome||r.produto||r.descricao||'',
-                category:normalizeProductCategory(r.category||r.categoria||r.grupo||'OUTROS'),
+                category:(r.category||r.categoria||r.grupo||'OUTROS').toString().toUpperCase(),
                 price:numImport(r.price??r.preco??r.valor??r.valor_varejo??r.valor_varejo),
                 icon:r.icon||'fa-box',
                 stock:(r.stock!==undefined&&r.stock!=='')?numImport(r.stock):(r.estoque!==undefined&&r.estoque!==''?numImport(r.estoque):(r.estoque_atual!==undefined&&r.estoque_atual!==''?numImport(r.estoque_atual):undefined)),
