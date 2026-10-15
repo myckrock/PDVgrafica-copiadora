@@ -52,6 +52,7 @@
   async function saveCalcPrices(prices) {
     if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar preços.');
     const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação dos preços');
+    if (!user) throw new Error('Sessão Supabase não autenticada.');
     const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single(); fail(pe,'Verificação do administrador');
     if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar os preços.');
     const safePrices={};
@@ -66,6 +67,59 @@
     setStatus('Banco online • preços compartilhados','online');
     return calcPrices;
   }
+  async function loadAuxiliaryData() {
+    if (!client) await init();
+    if (!client || !cloudReady) return null;
+    const queries = await Promise.allSettled([
+      client.from('suppliers').select('*').eq('active',true),
+      client.from('customer_contacts').select('*'),
+      client.from('customer_addresses').select('*'),
+      client.from('supplier_addresses').select('*')
+    ]);
+    const get = (idx) => queries[idx]?.status === 'fulfilled' ? queries[idx].value : {data:null,error:queries[idx]?.reason};
+    const sr=get(0), cc=get(1), ca=get(2), sa=get(3);
+    // As tabelas auxiliares podem ainda não existir em instalações antigas.
+    // Nesse caso não interrompemos o login; após executar a migration SQL, os dados passam a carregar normalmente.
+    const missing = [sr,cc,ca,sa].some(r=>r.error && /relation .* does not exist|could not find the table/i.test(r.error.message||''));
+    if (missing) { console.warn('Tabelas auxiliares do Excel ainda não foram criadas. Execute supabase_import_auxiliary.sql.'); return null; }
+    fail(sr.error,'Leitura de fornecedores'); fail(cc.error,'Leitura de contatos'); fail(ca.error,'Leitura de endereços de clientes'); fail(sa.error,'Leitura de endereços de fornecedores');
+    if (sr.data?.length && typeof suppliers!=='undefined') { suppliers=sr.data; localStorage.setItem('pdv_suppliers',JSON.stringify(suppliers)); }
+    if (cc.data?.length && typeof customerContacts!=='undefined') { customerContacts=cc.data; localStorage.setItem('pdv_customer_contacts',JSON.stringify(customerContacts)); }
+    if (ca.data?.length && typeof customerAddresses!=='undefined') { customerAddresses=ca.data; localStorage.setItem('pdv_customer_addresses',JSON.stringify(customerAddresses)); }
+    if (sa.data?.length && typeof supplierAddresses!=='undefined') { supplierAddresses=sa.data; localStorage.setItem('pdv_supplier_addresses',JSON.stringify(supplierAddresses)); }
+    return {suppliers:sr.data||[],customerContacts:cc.data||[],customerAddresses:ca.data||[],supplierAddresses:sa.data||[]};
+  }
+
+  async function syncAuxiliaryData() {
+    if (!client || !cloudReady) throw new Error('Supabase não está conectado. Faça login antes de sincronizar os cadastros auxiliares.');
+    const job=async()=>{
+      const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Sessão'); if(!user) throw new Error('Sessão expirada');
+      const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single(); fail(pe,'Perfil');
+      if(!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode importar/exportar fornecedores, contatos e endereços.');
+
+      const datasets = [
+        ['suppliers', typeof suppliers!=='undefined' ? suppliers : [], 'fornecedores'],
+        ['customer_contacts', typeof customerContacts!=='undefined' ? customerContacts : [], 'contatos de clientes'],
+        ['customer_addresses', typeof customerAddresses!=='undefined' ? customerAddresses : [], 'endereços de clientes'],
+        ['supplier_addresses', typeof supplierAddresses!=='undefined' ? supplierAddresses : [], 'endereços de fornecedores']
+      ];
+      const maps = {
+        suppliers: r=>({id:String(r.id),name:String(r.name||r.nome||''),supplier_type:r.supplierType||r.supplier_type||r.tipo_fornecedor||r.tipo_de_fornecedor||r.tipo||null,active:r.active!==false,email:r.email||null,phone:r.phone||r.telefone||null,mobile:r.mobile||r.celular||null,notes:r.notes||r.observacao||null,updated_at:new Date().toISOString()}),
+        customer_contacts: r=>({id:String(r.id),customer_id:String(r.customer_id||r.cliente_id||r.codigo||''),contact_type:r.contact_type||r.tipo_contato||r.tipo_de_contato||r.tipo||null,name:r.name||r.nome||null,contact:r.contact||r.contato||null,cargo:r.cargo||null,notes:r.notes||r.observacao||null,updated_at:new Date().toISOString()}),
+        customer_addresses: r=>({id:String(r.id),customer_id:String(r.customer_id||r.cliente_id||r.codigo||''),address_type:r.address_type||r.tipo_endereco||r.tipo||null,cep:r.cep||null,logradouro:r.logradouro||r.rua||r.endereco||null,numero:r.numero||null,complemento:r.complemento||null,bairro:r.bairro||null,cidade:r.cidade||null,uf:r.uf||null,updated_at:new Date().toISOString()}),
+        supplier_addresses: r=>({id:String(r.id),supplier_id:String(r.supplier_id||r.fornecedor_id||r.codigo||''),address_type:r.address_type||r.tipo_endereco||r.tipo||null,cep:r.cep||null,logradouro:r.logradouro||r.rua||r.endereco||null,numero:r.numero||null,complemento:r.complemento||null,bairro:r.bairro||null,cidade:r.cidade||null,uf:r.uf||null,updated_at:new Date().toISOString()})
+      };
+      for (const [table, list, label] of datasets) {
+        const rows=list.map(maps[table]).filter(r=>r.id && (table==='suppliers' ? r.name : (table.includes('customer') ? r.customer_id : r.supplier_id)));
+        if (!rows.length) continue;
+        const r=await client.from(table).upsert(rows,{onConflict:'id'});
+        fail(r.error,'Gravação de '+label);
+      }
+      setStatus('Banco online • cadastros auxiliares sincronizados','online');
+    };
+    syncInProgress=syncInProgress.then(job,job); return syncInProgress;
+  }
+
   async function loadData() {
     if (!client) await init();
     if (!client) throw new Error('Cliente Supabase não inicializado');
@@ -85,34 +139,14 @@
       salesHistory=sr.data.map(s=>({id:s.id,date:s.sale_date,operatorUsername:s.operator_username,operatorName:s.operator_name,customer:s.customer||'Consumidor Final',customerId:s.customer_id,customerType:s.customer_type,subtotal:Number(s.subtotal),discount:Number(s.discount),total:Number(s.total),payMethod:s.pay_method,items:bySale[s.id]||[]}));
       localStorage.setItem('pdv_sales_history',JSON.stringify(salesHistory));
     }
+    try { await loadAuxiliaryData(); } catch(e) { console.warn('Não foi possível carregar cadastros auxiliares:',e); }
     cloudReady=true; setStatus('Banco online • dados carregados','online');
   }
   // Salva um único produto imediatamente no Supabase e só confirma após retorno do banco.
-  async function ensureSession(action='Autenticação') {
-    if (!client) await init();
-    if (!client) throw new Error('Supabase não foi inicializado.');
-    let {data:{session},error}=await client.auth.getSession();
-    if (error) throw new Error(`${action}: ${error.message || 'erro ao verificar a sessão'}`);
-    if (!session) {
-      try {
-        const refreshed=await client.auth.refreshSession();
-        session=refreshed?.data?.session || null;
-        if (refreshed?.error) console.warn('Falha ao renovar sessão:', refreshed.error);
-      } catch (e) {
-        console.warn('Falha ao renovar sessão Supabase:', e);
-      }
-    }
-    if (!session?.user) {
-      cloudReady=false;
-      setStatus('Sessão expirada • faça login novamente','error');
-      throw new Error(`${action}: sessão Supabase ausente. Faça login novamente no PDV.`);
-    }
-    cloudReady=true;
-    return session.user;
-  }
-
   async function saveProduct(product) {
-    const user=await ensureSession('Autenticação do produto');
+    if (!client || !cloudReady) throw new Error('Entre com uma conta autenticada no Supabase antes de salvar produtos.');
+    const {data:{user},error:ue}=await client.auth.getUser(); fail(ue,'Autenticação do produto');
+    if (!user) throw new Error('Sessão Supabase não autenticada.');
     const {data:profile,error:pe}=await client.from('profiles').select('role,active').eq('id',user.id).single();
     fail(pe,'Verificação do administrador');
     if (!profile?.active || profile.role!=='ADMIN') throw new Error('Somente um administrador ativo pode alterar produtos.');
@@ -134,7 +168,7 @@
       if(!profile?.active) throw new Error('Perfil inativo');
       // Sincronização dos registros já carregados no PDV, usando IDs estáveis.
       if(typeof catalog!=='undefined' && profile.role==='ADMIN') { const rows=catalog.map(productToDb); if(rows.length){const r=await client.from('products').upsert(rows,{onConflict:'id'});fail(r.error,'Gravação de produtos');} }
-      // Clientes e saldos financeiros são gravados por RPCs específicas; não sobrescrever saldos com cache local.
+      if(typeof customers!=='undefined' && profile.role==='ADMIN') { const rows=customers.map(customerToDb); if(rows.length){const r=await client.from('customers').upsert(rows,{onConflict:'id'});fail(r.error,'Gravação de clientes');} }
       setStatus('Banco online • sincronizado','online');
     };
     syncInProgress=syncInProgress.then(job,job); return syncInProgress;
@@ -148,42 +182,12 @@
     if(its.length){const ins=await client.from('sale_items').insert(its);fail(ins.error,'Gravação dos itens');}
     setStatus('Banco online • venda sincronizada','online');
   }
-  async function saveCustomer(customer) {
-    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para salvar clientes.');
-    const row=customerToDb(customer);
-    const {data,error}=await client.rpc('pdv_save_customer',{p_customer:row});
-    fail(error,'Gravação do cliente');
-    if (!data?.id) throw new Error('O banco não confirmou o cadastro do cliente.');
-    return customerFromDb(data);
-  }
-  async function addCustomerCredit(customerId,amount,note='Recarga de crédito') {
-    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para adicionar crédito.');
-    const {data,error}=await client.rpc('pdv_add_customer_credit',{p_customer_id:String(customerId),p_amount:Number(amount),p_note:note});
-    fail(error,'Recarga de crédito');
-    if (!data?.id) throw new Error('O banco não confirmou a recarga.');
-    return customerFromDb(data);
-  }
-  async function finalizeSale(s) {
-    if (!client || !cloudReady) throw new Error('Conecte-se ao Supabase para concluir esta venda.');
-    const sale={id:String(s.id),sale_date:s.date||new Date().toISOString(),operator_username:s.operatorUsername||null,
-      operator_name:s.operatorName||null,customer:s.customer||null,customer_id:s.customerId||null,
-      customer_type:s.customerType||'CONSUMIDOR',subtotal:Number(s.subtotal)||0,discount:Number(s.discount)||0,
-      total:Number(s.total)||0,pay_method:String(s.payMethod||'')};
-    const items=(s.items||[]).map(i=>({product_id:i.id?String(i.id):null,product_name:String(i.name||i.productName||'Item'),
-      quantity:Number(i.qty??i.quantity)||1,unit_price:Number(i.price??i.unitPrice)||0,
-      total:Number(i.totalPrice??i.total??((Number(i.price??i.unitPrice)||0)*(Number(i.qty??i.quantity)||1)))}));
-    const {data,error}=await client.rpc('pdv_finalize_sale',{p_sale:sale,p_items:items});
-    fail(error,'Finalização da venda');
-    if (!data || typeof data!=='object') throw new Error('O banco não confirmou a venda.');
-    setStatus(data.duplicate?'Banco online • venda já registrada':'Banco online • venda e saldo atualizados','online');
-    return {duplicate:!!data.duplicate,customer:data.customer?customerFromDb(data.customer):null};
-  }
   async function showStatus(){
     if(!client) await init();
     if(!client){alert('Confira a URL, a chave pública e o carregamento da biblioteca Supabase.');return;}
     const {data:{user},error}=await client.auth.getUser();
     if(error) alert('Erro: '+error.message); else alert(user?`Sessão autenticada: ${user.email||user.id}`:'Supabase configurado, mas não há sessão autenticada.');
   }
-  window.PDVCloud={init,loadData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,saveCustomer,addCustomerCredit,finalizeSale,showStatus,setStatus,ensureSession,get client(){return client;},get ready(){return cloudReady;}};
+  window.PDVCloud={init,loadData,loadAuxiliaryData,syncAuxiliaryData,loadCalcPrices,saveCalcPrices,saveProduct,syncData,syncSale,showStatus,setStatus,get client(){return client;},get ready(){return cloudReady;}};
   window.addEventListener('DOMContentLoaded',()=>{init();});
 })();
