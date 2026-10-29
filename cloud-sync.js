@@ -279,16 +279,9 @@
 
   async function finalizeSale(order) {
     const cloud = await requireClient();
-    const { data: { user }, error: userError } = await cloud.auth.getUser();
-    if (userError) throw userError;
-    if (!user) throw new Error('Sessão Supabase não autenticada. Faça login novamente.');
-
-    // O RLS do banco pode exigir que a venda pertença ao usuário autenticado.
-    // Por isso operator_id é sempre preenchido com auth.uid().
     const saleRow = {
       id: order.id,
       sale_date: order.date || new Date().toISOString(),
-      operator_id: user.id,
       operator_username: order.operatorUsername || null,
       operator_name: order.operatorName || null,
       customer: order.customer || 'Consumidor Final',
@@ -307,9 +300,9 @@
       sale_id: order.id,
       product_id: i.id || null,
       product_name: i.name || 'Item',
-      quantity: Number(i.qty) || 1,
+      qty: Number(i.qty) || 1,
       unit_price: Number(i.unitPrice) || 0,
-      total: Number(i.totalPrice) || 0
+      total_price: Number(i.totalPrice) || 0
     }));
     if (items.length) {
       const r = await cloud.from('sale_items').insert(items);
