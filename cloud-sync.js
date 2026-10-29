@@ -58,9 +58,9 @@
     const items = dbItems.map(i => ({
       id: i.product_id || i.id,
       name: i.product_name || i.name || 'Item',
-      qty: Number(i.qty ?? i.quantity) || 1,
+      qty: Number(i.qty) || 1,
       unitPrice: Number(i.unit_price ?? i.unitPrice ?? 0) || 0,
-      totalPrice: Number(i.total_price ?? i.total ?? i.totalPrice ?? ((Number(i.qty ?? i.quantity)||1) * Number(i.unit_price ?? i.unitPrice ?? 0))) || 0
+      totalPrice: Number(i.total_price ?? i.totalPrice ?? ((Number(i.qty)||1) * Number(i.unit_price||0))) || 0
     }));
     return {
       id: s.id,
@@ -279,9 +279,16 @@
 
   async function finalizeSale(order) {
     const cloud = await requireClient();
+    const { data: { user }, error: userError } = await cloud.auth.getUser();
+    if (userError) throw userError;
+    if (!user) throw new Error('Sessão Supabase não autenticada. Faça login novamente.');
+
+    // O RLS do banco pode exigir que a venda pertença ao usuário autenticado.
+    // Por isso operator_id é sempre preenchido com auth.uid().
     const saleRow = {
       id: order.id,
       sale_date: order.date || new Date().toISOString(),
+      operator_id: user.id,
       operator_username: order.operatorUsername || null,
       operator_name: order.operatorName || null,
       customer: order.customer || 'Consumidor Final',
@@ -293,27 +300,13 @@
       total: Number(order.total) || 0,
       pay_method: order.payMethod || 'PIX'
     };
-    // A coluna observation foi adicionada posteriormente ao schema.
-    // Tentamos gravar normalmente e, se o banco ainda não tiver a coluna,
-    // fazemos fallback sem ela para não impedir a emissão da comanda.
-    let sale = await cloud.from('sales').insert(saleRow).select().single();
-    let observationNotSupported = false;
-    if (sale.error && order.observation) {
-      const msg = String(sale.error.message || sale.error.details || '').toLowerCase();
-      if (sale.error.code === 'PGRST204' || sale.error.code === '42703' || msg.includes('observation') || msg.includes('column')) {
-        observationNotSupported = true;
-        const fallbackRow = { ...saleRow };
-        delete fallbackRow.observation;
-        sale = await cloud.from('sales').insert(fallbackRow).select().single();
-      }
-    }
+    const sale = await cloud.from('sales').insert(saleRow).select().single();
     if (sale.error) throw sale.error;
 
     const items = (order.items || []).map(i => ({
       sale_id: order.id,
       product_id: i.id || null,
       product_name: i.name || 'Item',
-      // Nomes conforme supabase_schema.sql atual: quantity e total.
       quantity: Number(i.qty) || 1,
       unit_price: Number(i.unitPrice) || 0,
       total: Number(i.totalPrice) || 0
@@ -346,7 +339,7 @@
         customer = normalizeCustomer(upd.data);
       } else customer = current;
     }
-    return { sale: sale.data, customer, observationNotSupported };
+    return { sale: sale.data, customer };
   }
 
   async function syncData() {
