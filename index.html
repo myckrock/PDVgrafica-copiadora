@@ -13,7 +13,7 @@
         <link rel="manifest" href="manifest.webmanifest">
         <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
         <link rel="apple-touch-icon" href="icon-192.png">
-        <meta name="pdv-app-version" content="1.1.0">
+        <meta name="pdv-app-version" content="1.4.0">
 
         <!-- Tailwind CSS -->
         <script src="https://cdn.tailwindcss.com"></script>
@@ -29,22 +29,57 @@
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
             body { font-family: 'Inter', sans-serif; }
             
-            /* Print Styles for Receipts */
+            /* Impressão da comanda: isola o conteúdo e evita imprimir o fundo do modal. */
             @media print {
-                body * { visibility: hidden; }
-                #receipt-print-area, #receipt-print-area * { visibility: visible; }
-                #receipt-print-area {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 80mm;
-                    padding: 5px;
-                    margin: 0;
-                    background: #fff;
-                    color: #000;
-                    font-family: monospace;
-                    font-size: 11px;
+                @page { size: 80mm auto; margin: 0; }
+                html, body {
+                    width: 80mm !important;
+                    min-width: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    background: #fff !important;
                 }
+                body * { visibility: hidden !important; }
+                #modal-receipt,
+                #modal-receipt > div,
+                #receipt-print-area,
+                #receipt-print-area * { visibility: visible !important; }
+                #modal-receipt {
+                    display: block !important;
+                    position: static !important;
+                    inset: auto !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                    background: transparent !important;
+                    backdrop-filter: none !important;
+                }
+                #modal-receipt > div {
+                    display: block !important;
+                    width: 80mm !important;
+                    max-width: none !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    overflow: visible !important;
+                    border: 0 !important;
+                    border-radius: 0 !important;
+                    box-shadow: none !important;
+                }
+                #receipt-print-area {
+                    display: block !important;
+                    position: static !important;
+                    width: 80mm !important;
+                    max-width: 80mm !important;
+                    box-sizing: border-box !important;
+                    padding: 4mm !important;
+                    margin: 0 !important;
+                    overflow: visible !important;
+                    background: #fff !important;
+                    color: #000 !important;
+                    font-family: monospace !important;
+                    font-size: 11px !important;
+                    line-height: 1.3 !important;
+                }
+                #receipt-print-area * { color: #000 !important; }
                 .no-print { display: none !important; }
             }
             
@@ -479,6 +514,11 @@
                             </div>
                         </div>
                         <div id="customer-credit-info" class="hidden text-[10px] rounded-lg px-2.5 py-2 bg-emerald-50 border border-emerald-100 text-emerald-800 font-semibold"></div>
+                        <div id="cart-sale-observation-box" class="mt-3 block w-full rounded-lg border-2 border-indigo-400 bg-indigo-50 p-3 shadow-sm">
+                            <label for="cart-sale-observation" class="block text-xs font-extrabold uppercase text-indigo-800 mb-1.5"><i class="fa-solid fa-pen-to-square mr-1"></i> Observação para a Comanda</label>
+                            <textarea id="cart-sale-observation" rows="3" maxlength="500" placeholder="Ex.: imprimir frente e verso, papel fotográfico, retirar às 15h..." style="display:block;width:100%;min-height:76px;box-sizing:border-box;" class="px-3 py-2 border border-indigo-300 rounded-md text-sm bg-white resize-y focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+                            <div class="text-[10px] text-indigo-700 text-right mt-1">A observação será incluída na comanda impressa (máximo 500 caracteres).</div>
+                        </div>
                     </div>
 
                     <!-- Cart List -->
@@ -586,6 +626,7 @@
                                     <th class="px-4 py-3">Cliente</th>
                                     <th class="px-4 py-3">Itens</th>
                                     <th class="px-4 py-3">Pagamento</th>
+                                    <th class="px-4 py-3">Observação</th>
                                     <th class="px-4 py-3">Total</th>
                                     <th class="px-4 py-3 text-right">Ação</th>
                                 </tr>
@@ -907,6 +948,10 @@
                                         <option value="sales">Histórico de vendas</option>
                                         <option value="credits">Movimentações de crédito</option>
                                         <option value="calculator">Preços das calculadoras</option>
+                                        <option value="suppliers">Fornecedores</option>
+                                        <option value="customer_contacts">Contatos de clientes</option>
+                                        <option value="customer_addresses">Endereços de clientes</option>
+                                        <option value="supplier_addresses">Endereços de fornecedores</option>
                                     </select>
                                     <button type="button" onclick="exportPDVXLSX()" class="w-full px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold"><i class="fa-solid fa-download mr-1"></i> Baixar arquivo .XLSX</button>
                                 </div>
@@ -920,7 +965,7 @@
                         <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                             <h4 class="font-bold text-slate-800 text-xs flex items-center gap-2"><i class="fa-solid fa-table text-emerald-600"></i> Planilhas do backup completo</h4>
                             <div class="mt-3 flex flex-wrap gap-2 text-[10px] text-slate-500">
-                                <span class="px-2 py-1 bg-white rounded-lg border">Clientes</span><span class="px-2 py-1 bg-white rounded-lg border">Produtos</span><span class="px-2 py-1 bg-white rounded-lg border">Operadores</span><span class="px-2 py-1 bg-white rounded-lg border">Vendas</span><span class="px-2 py-1 bg-white rounded-lg border">Itens_Venda</span><span class="px-2 py-1 bg-white rounded-lg border">Creditos</span><span class="px-2 py-1 bg-white rounded-lg border">Calculadoras</span>
+                                <span class="px-2 py-1 bg-white rounded-lg border">Clientes</span><span class="px-2 py-1 bg-white rounded-lg border">Produtos</span><span class="px-2 py-1 bg-white rounded-lg border">Operadores</span><span class="px-2 py-1 bg-white rounded-lg border">Vendas</span><span class="px-2 py-1 bg-white rounded-lg border">Itens_Venda</span><span class="px-2 py-1 bg-white rounded-lg border">Creditos</span><span class="px-2 py-1 bg-white rounded-lg border">Calculadoras</span><span class="px-2 py-1 bg-white rounded-lg border">Fornecedores</span><span class="px-2 py-1 bg-white rounded-lg border">Contatos_Clientes</span><span class="px-2 py-1 bg-white rounded-lg border">Enderecos_Clientes</span><span class="px-2 py-1 bg-white rounded-lg border">Enderecos_Fornecedores</span>
                             </div>
                         </div>
                         <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
@@ -1006,9 +1051,9 @@
                 <!-- Receipt Layout (Used for both Screen and Printing) -->
                 <div id="receipt-print-area" class="p-5 font-mono text-[11px] leading-tight space-y-3 bg-white text-slate-900">
                     <div class="text-center border-b pb-2 border-dashed border-slate-400">
-                        <h2 class="font-black text-sm">COPIADORA COPYNEW</h2>
-                        <p class="text-[10px]"> R. Amoroso Costa, 01 - Jardim das Américas</p>
-                        <p class="text-[10px]">CNPJ: 04.962.876/0001-70, - Tel: (41) 99999-6305</p>
+                        <h2 class="font-black text-sm">GRÁFICA & COPIADORA PRO</h2>
+                        <p class="text-[10px]">Rua das Impressões, 1000 - Centro</p>
+                        <p class="text-[10px]">CNPJ: 00.123.456/0001-89 - Tel: (41) 99999-8888</p>
                     </div>
 
                     <div class="border-b pb-2 border-dashed border-slate-400 space-y-0.5">
@@ -1019,10 +1064,15 @@
                     </div>
 
                     <div class="border-b pb-2 border-dashed border-slate-400">
-                        <p class="font-bold mb-1">ITENS DA COMPRA:</p>  
+                        <p class="font-bold mb-1">ITENS DA COMPRA:</p>
                         <div id="rec-items-list" class="space-y-1">
                             <!-- Dynamic items -->
                         </div>
+                    </div>
+
+                    <div id="rec-observation-box" class="border-b border-dashed border-slate-400 pb-2 hidden">
+                        <p class="font-bold">OBSERVAÇÃO:</p>
+                        <p id="rec-observation" class="whitespace-pre-wrap break-words font-normal mt-0.5"></p>
                     </div>
 
                     <div class="space-y-0.5 text-right font-bold">
@@ -1039,8 +1089,8 @@
                 </div>
 
                 <div class="p-4 bg-slate-50 border-t flex gap-2 no-print">
-                    <button onclick="window.print()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5">
-                        <i class="fa-solid fa-print"></i> Imprimir
+                    <button onclick="printReceipt()" class="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-print"></i> Imprimir Comanda
                     </button>
                     <button onclick="closeReceiptModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs">
                         Fechar
@@ -1139,7 +1189,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="cloud-sync.js?v=auth-refresh-2"></script>
+    <script src="cloud-sync.js?v=comanda-20261102-1"></script>
 
     <script>
     /* APPLICATION STATE & SEEDED DATA */
@@ -1247,6 +1297,13 @@
 
     // Customer Registry (managed exclusively by ADMIN)
     let customers = JSON.parse(localStorage.getItem('pdv_customers')) || [];
+
+    // Cadastros auxiliares importados/exportados pelo Administrador.
+    // Eles ficam em cache local e também são persistidos nas tabelas próprias do Supabase.
+    let suppliers = JSON.parse(localStorage.getItem('pdv_suppliers')) || [];
+    let customerContacts = JSON.parse(localStorage.getItem('pdv_customer_contacts')) || [];
+    let customerAddresses = JSON.parse(localStorage.getItem('pdv_customer_addresses')) || [];
+    let supplierAddresses = JSON.parse(localStorage.getItem('pdv_supplier_addresses')) || [];
 
     // Cart State
     let cart = [];
@@ -1897,6 +1954,8 @@
         document.getElementById('cart-customer-id').value = '';
         document.getElementById('cart-customer-name').value = '';
         document.getElementById('cart-customer-cpf').value = '';
+        const observationEl = document.getElementById('cart-sale-observation');
+        if (observationEl) observationEl.value = '';
         document.getElementById('cart-discount-val').value = '0';
         handleCartCustomerTypeChange();
         renderCart();
@@ -2022,6 +2081,7 @@
         const customerType = getCurrentCartCustomerType();
         const registeredCustomer = getSelectedRegisteredCustomer();
         const manualCustomer = document.getElementById('cart-customer-name').value.trim();
+        const observation = (document.getElementById('cart-sale-observation')?.value || '').trim().slice(0, 500);
         const customer = registeredCustomer ? registeredCustomer.name : (manualCustomer || 'Consumidor Final');
         if (customerType !== 'CONSUMIDOR' && !registeredCustomer) { showToast('Selecione um cliente cadastrado.', 'error'); return; }
         if (selectedPayMethod === 'DINHEIRO') {
@@ -2036,6 +2096,7 @@
             date: new Date().toISOString(), operatorUsername: currentUser.username,
             operatorName: currentUser.fullname || currentUser.name, customer,
             customerId: registeredCustomer ? registeredCustomer.id : null, customerType,
+            observation,
             items: JSON.parse(JSON.stringify(cart)), subtotal, discount, total,
             payMethod: customerType==='MENSALISTA'?'MENSALISTA':customerType==='CREDITO_ANTECIPADO'?'CREDITO_ANTECIPADO':selectedPayMethod
         };
@@ -2083,8 +2144,27 @@
         document.getElementById('rec-discount').innerText = formatBRL(order.discount);
         document.getElementById('rec-total').innerText = formatBRL(order.total);
         document.getElementById('rec-paymethod').innerText = order.payMethod;
+        const observationBox = document.getElementById('rec-observation-box');
+        const observationEl = document.getElementById('rec-observation');
+        if (observationBox && observationEl) {
+            observationEl.innerText = order.observation || '';
+            observationBox.classList.toggle('hidden', !order.observation);
+        }
 
         document.getElementById('modal-receipt').classList.remove('hidden');
+    }
+
+    function printReceipt() {
+        const receipt = document.getElementById('receipt-print-area');
+        if (!receipt) {
+            showToast('Não foi possível localizar o conteúdo da comanda.', 'error');
+            return;
+        }
+        if (!receipt.innerText.trim()) {
+            showToast('A comanda está vazia. Conclua uma venda antes de imprimir.', 'error');
+            return;
+        }
+        window.print();
     }
 
     function closeReceiptModal() {
@@ -2120,7 +2200,7 @@
         document.getElementById('kpi-top-method').innerText = topMethod;
 
         if (salesHistory.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-slate-400">Nenhuma venda registrada.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" class="p-4 text-center text-slate-400">Nenhuma venda registrada.</td></tr>`;
             return;
         }
 
@@ -2134,6 +2214,7 @@
                 <td class="px-4 py-3 text-slate-600">${s.customer}</td>
                 <td class="px-4 py-3 text-slate-500 max-w-xs truncate">${s.items.map(i => `${i.qty}x ${i.name}`).join(', ')}</td>
                 <td class="px-4 py-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">${s.payMethod}</span></td>
+                <td class="px-4 py-3 text-slate-500 max-w-xs truncate" title="${s.observation || ''}">${s.observation || '—'}</td>
                 <td class="px-4 py-3 font-black text-slate-900">${formatBRL(s.total)}</td>
                 <td class="px-4 py-3 text-right">
                     <button onclick='reprintReceipt("${s.id}")' class="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg font-bold text-xs" title="Reimprimir Comprovante">
@@ -2245,7 +2326,8 @@
             format: 'PDV-GRAFICA-BACKUP', version: 2, exportedAt: new Date().toISOString(),
             source: 'PDV Gráfica & Copiadora Pro',
             local: { products: catalog || [], customers: customers || [], sales: salesHistory || [], users: safeExportUsers(users), calculatorPrices: calcPrices || {} },
-            cloud: { profiles: [], products: [], customers: [], sales: [], saleItems: [], creditTransactions: [], calculatorPrices: null }
+            cloud: { profiles: [], products: [], customers: [], sales: [], saleItems: [], creditTransactions: [], calculatorPrices: null,
+                suppliers: [], customerContacts: [], customerAddresses: [], supplierAddresses: [] }
         };
         const cloud = window.PDVCloud?.client;
         if (cloud && window.PDVCloud?.ready) {
@@ -2255,11 +2337,16 @@
                 cloud.from('customers').select('*'),
                 cloud.from('sales').select('*').order('sale_date',{ascending:false}),
                 cloud.from('credit_transactions').select('*').order('created_at',{ascending:false}),
-                cloud.from('calculator_prices').select('*').eq('id','default').maybeSingle()
+                cloud.from('calculator_prices').select('*').eq('id','default').maybeSingle(),
+                cloud.from('suppliers').select('*'),
+                cloud.from('customer_contacts').select('*'),
+                cloud.from('customer_addresses').select('*'),
+                cloud.from('supplier_addresses').select('*')
             ]);
             const assign = (idx, key) => { const r=queries[idx]; if(r.status==='fulfilled' && !r.value.error) backup.cloud[key]=r.value.data||[]; };
             assign(0,'profiles'); assign(1,'products'); assign(2,'customers'); assign(3,'sales'); assign(4,'creditTransactions');
             if(queries[5]?.status==='fulfilled' && !queries[5].value.error) backup.cloud.calculatorPrices=queries[5].value.data||null;
+            assign(6,'suppliers'); assign(7,'customerContacts'); assign(8,'customerAddresses'); assign(9,'supplierAddresses');
             if(backup.cloud.sales.length) {
                 const ids=backup.cloud.sales.map(s=>s.id).filter(Boolean);
                 for(let i=0;i<ids.length;i+=500){ const r=await cloud.from('sale_items').select('*').in('sale_id',ids.slice(i,i+500)); if(!r.error&&r.data) backup.cloud.saleItems.push(...r.data); }
@@ -2274,6 +2361,10 @@
         if(type==='users') return safeExportUsers(backup.local.users);
         if(type==='sales') return (backup.local.sales||[]).map(s=>({id:s.id,date:s.date,operator_username:s.operatorUsername,operator_name:s.operatorName,customer:s.customer,customer_id:s.customerId,customer_type:s.customerType,subtotal:s.subtotal,discount:s.discount,total:s.total,pay_method:s.payMethod}));
         if(type==='calculator') return Object.entries(backup.local.calculatorPrices||{}).map(([key,value])=>({chave:key,valor:value}));
+        if(type==='suppliers') return (backup.cloud.suppliers||[]).map(r=>({id:r.id,nome:r.name||r.nome||'',tipo:r.supplier_type||r.type||'',ativo:r.active!==false,email:r.email||'',telefone:r.phone||'',celular:r.mobile||'',observacao:r.notes||r.observacao||''}));
+        if(type==='customer_contacts') return (backup.cloud.customerContacts||[]).map(r=>({id:r.id,customer_id:r.customer_id,tipo:r.contact_type||r.tipo||'',nome:r.name||r.nome||'',contato:r.contact||r.contato||'',cargo:r.cargo||'',observacao:r.notes||r.observacao||''}));
+        if(type==='customer_addresses') return (backup.cloud.customerAddresses||[]).map(r=>({id:r.id,customer_id:r.customer_id,tipo:r.address_type||r.tipo||'',cep:r.cep||'',logradouro:r.logradouro||'',numero:r.numero||'',complemento:r.complemento||'',bairro:r.bairro||'',cidade:r.cidade||'',uf:r.uf||''}));
+        if(type==='supplier_addresses') return (backup.cloud.supplierAddresses||[]).map(r=>({id:r.id,supplier_id:r.supplier_id,tipo:r.address_type||r.tipo||'',cep:r.cep||'',logradouro:r.logradouro||'',numero:r.numero||'',complemento:r.complemento||'',bairro:r.bairro||'',cidade:r.cidade||'',uf:r.uf||''}));
         return [];
     }
 
@@ -2297,11 +2388,23 @@
                 appendXlsxSheet(wb,'Nuvem_Vendas',backup.cloud.sales||[]);
                 appendXlsxSheet(wb,'Nuvem_Operadores',backup.cloud.profiles||[]);
                 appendXlsxSheet(wb,'Nuvem_Creditos',backup.cloud.creditTransactions||[]);
+                appendXlsxSheet(wb,'Fornecedores',localExportRows('suppliers',backup));
+                appendXlsxSheet(wb,'Contatos_Clientes',localExportRows('customer_contacts',backup));
+                appendXlsxSheet(wb,'Enderecos_Clientes',localExportRows('customer_addresses',backup));
+                appendXlsxSheet(wb,'Enderecos_Fornecedores',localExportRows('supplier_addresses',backup));
+                appendXlsxSheet(wb,'Nuvem_Fornecedores',backup.cloud.suppliers||[]);
+                appendXlsxSheet(wb,'Nuvem_Contatos_Clientes',backup.cloud.customerContacts||[]);
+                appendXlsxSheet(wb,'Nuvem_Enderecos_Clientes',backup.cloud.customerAddresses||[]);
+                appendXlsxSheet(wb,'Nuvem_Enderecos_Fornecedores',backup.cloud.supplierAddresses||[]);
                 XLSX.writeFile(wb,`backup-pdv-grafica-${date}.xlsx`);
                 setImportExportStatus('Backup Excel exportado com sucesso, com '+wb.SheetNames.length+' planilhas.');
                 return;
             }
             if(type==='credits') appendXlsxSheet(wb,'Creditos',backup.cloud.creditTransactions||[]);
+            else if(type==='suppliers') appendXlsxSheet(wb,'Fornecedores',localExportRows('suppliers',backup));
+            else if(type==='customer_contacts') appendXlsxSheet(wb,'Contatos_Clientes',localExportRows('customer_contacts',backup));
+            else if(type==='customer_addresses') appendXlsxSheet(wb,'Enderecos_Clientes',localExportRows('customer_addresses',backup));
+            else if(type==='supplier_addresses') appendXlsxSheet(wb,'Enderecos_Fornecedores',localExportRows('supplier_addresses',backup));
             else appendXlsxSheet(wb,{customers:'Clientes',products:'Produtos',users:'Operadores',sales:'Vendas',calculator:'Calculadoras'}[type],localExportRows(type,backup));
             XLSX.writeFile(wb,`pdv-${type}-${date}.xlsx`);
             setImportExportStatus('Arquivo Excel exportado com sucesso.');
@@ -2340,7 +2443,11 @@
             users:['operadores','operador','usuarios','usuarios_operadores','users'],
             sales:['vendas','venda','historico_vendas'],
             credits:['creditos','credito','movimentacoes_credito'],
-            calculator:['calculadoras','calculadora','precos_calculadoras']
+            calculator:['calculadoras','calculadora','precos_calculadoras'],
+            suppliers:['fornecedores','fornecedor','suppliers'],
+            customer_contacts:['contatos_clientes','clientes_contatos','contatos','customer_contacts'],
+            customer_addresses:['enderecos_clientes','clientes_enderecos','enderecos','customer_addresses'],
+            supplier_addresses:['enderecos_fornecedores','fornecedores_enderecos','supplier_addresses']
         };
         const wanted = (aliases[kind]||[]).map(normalizeImportKey);
         return workbook.SheetNames.find(n=>{
@@ -2368,6 +2475,10 @@
         if (has('total') && (has('date','data') || has('pay_method','forma_pagamento','pagamento'))) return 'sales';
         if (has('customer_id','cliente_id') && has('balance','saldo','valor') ) return 'credits';
         if (has('chave','key') && has('valor','value','preco')) return 'calculator';
+        if (has('supplier_id','fornecedor_id') || (has('nome','name') && has('tipo','type') && has('email') && (has('telefone','phone') || has('celular','mobile')))) return 'suppliers';
+        if (has('customer_id','cliente_id') && has('contato','contact')) return 'customer_contacts';
+        if (has('customer_id','cliente_id') && has('logradouro','rua','endereco')) return 'customer_addresses';
+        if (has('supplier_id','fornecedor_id') && has('logradouro','rua','endereco')) return 'supplier_addresses';
         if (has('cpf','cpf_cnpj','telefone','phone') ||
             has('monthly_limit','limite_mensal','monthly_used','credit_balance','saldo_credito') ||
             (has('name','nome') && has('type','tipo') && has('phone','telefone'))) return 'customers';
@@ -2440,7 +2551,23 @@
             const imported=safeExportUsers(normalized.map((r,i)=>({id:r.id||`usr_import_${Date.now()}_${i}`,fullname:r.fullname||r.full_name||r.nome||r.name||'',username:r.username||r.usuario||'',email:r.email||'',role:(r.role||r.perfil||'OPERATOR').toString().toUpperCase(),active:boolImport(r.active,true)})).filter(u=>u.username));
             const byId=new Map((users||[]).map(u=>[String(u.id),u]));imported.forEach(u=>byId.set(String(u.id),u));users=[...byId.values()];localStorage.setItem('pdv_users',JSON.stringify(users));renderUsersList();renderUsersTable();return `Importados ${imported.length} operador(es)/usuário(s).`;
         }
-        throw new Error('Planilha não reconhecida. Para produtos, use as colunas Produto, Grupo e Valor Varejo; também aceitamos Nome, Categoria e Preço.');
+        if(kind==='suppliers') {
+            const imported=normalized.map((r,i)=>({id:String(r.id||r.codigo||`forn_import_${Date.now()}_${i}`),name:r.name||r.nome||r.fornecedor||'',supplierType:r.supplier_type||r.tipo_fornecedor||r.tipo_de_fornecedor||r.tipo||'',active:boolImport(r.active??r.ativo,true),email:r.email||'',phone:r.phone||r.telefone||'',mobile:r.mobile||r.celular||'',notes:r.notes||r.observacao||r.observacoes||'',created_at:r.created_at||new Date().toISOString()})).filter(r=>r.name);
+            const byId=new Map((suppliers||[]).map(r=>[String(r.id),r])); imported.forEach(r=>byId.set(String(r.id),r)); suppliers=[...byId.values()]; localStorage.setItem('pdv_suppliers',JSON.stringify(suppliers)); return `Importados ${imported.length} fornecedor(es).`;
+        }
+        if(kind==='customer_contacts') {
+            const imported=normalized.map((r,i)=>({id:String(r.id||`cc_${r.customer_id||r.cliente_id||'semcliente'}_${Date.now()}_${i}`),customer_id:String(r.customer_id||r.cliente_id||r.codigo||''),contact_type:r.contact_type||r.tipo_contato||r.tipo_de_contato||r.tipo||'',name:r.name||r.nome||'',contact:r.contact||r.contato||'',cargo:r.cargo||'',notes:r.notes||r.observacao||'',created_at:r.created_at||new Date().toISOString()})).filter(r=>r.customer_id&&(r.contact||r.name));
+            const byId=new Map((customerContacts||[]).map(r=>[String(r.id),r])); imported.forEach(r=>byId.set(String(r.id),r)); customerContacts=[...byId.values()]; localStorage.setItem('pdv_customer_contacts',JSON.stringify(customerContacts)); return `Importados ${imported.length} contato(s) de cliente.`;
+        }
+        if(kind==='customer_addresses') {
+            const imported=normalized.map((r,i)=>({id:String(r.id||`ca_${r.customer_id||r.cliente_id||'semcliente'}_${Date.now()}_${i}`),customer_id:String(r.customer_id||r.cliente_id||r.codigo||''),address_type:r.address_type||r.tipo_endereco||r.tipo||'',cep:r.cep||'',logradouro:r.logradouro||r.rua||r.endereco||'',numero:r.numero||'',complemento:r.complemento||'',bairro:r.bairro||'',cidade:r.cidade||'',uf:r.uf||'',created_at:r.created_at||new Date().toISOString()})).filter(r=>r.customer_id&&(r.logradouro||r.cep));
+            const byId=new Map((customerAddresses||[]).map(r=>[String(r.id),r])); imported.forEach(r=>byId.set(String(r.id),r)); customerAddresses=[...byId.values()]; localStorage.setItem('pdv_customer_addresses',JSON.stringify(customerAddresses)); return `Importados ${imported.length} endereço(s) de cliente.`;
+        }
+        if(kind==='supplier_addresses') {
+            const imported=normalized.map((r,i)=>({id:String(r.id||`sa_${r.supplier_id||r.fornecedor_id||'semfornecedor'}_${Date.now()}_${i}`),supplier_id:String(r.supplier_id||r.fornecedor_id||r.codigo||''),address_type:r.address_type||r.tipo_endereco||r.tipo||'',cep:r.cep||'',logradouro:r.logradouro||r.rua||r.endereco||'',numero:r.numero||'',complemento:r.complemento||'',bairro:r.bairro||'',cidade:r.cidade||'',uf:r.uf||'',created_at:r.created_at||new Date().toISOString()})).filter(r=>r.supplier_id&&(r.logradouro||r.cep));
+            const byId=new Map((supplierAddresses||[]).map(r=>[String(r.id),r])); imported.forEach(r=>byId.set(String(r.id),r)); supplierAddresses=[...byId.values()]; localStorage.setItem('pdv_supplier_addresses',JSON.stringify(supplierAddresses)); return `Importados ${imported.length} endereço(s) de fornecedor.`;
+        }
+        throw new Error('Planilha não reconhecida. Use as abas Clientes, Produtos, Operadores, Fornecedores, Contatos_Clientes, Enderecos_Clientes ou Enderecos_Fornecedores.');
     }
 
     async function handlePDVImportFile(event) {
@@ -2473,6 +2600,11 @@
 
                 const userRows=rowsForImportKind(wb,'users');
                 if(userRows.length) result.push(importXlsxRows(userRows,'users'));
+
+                for (const auxKind of ['suppliers','customer_contacts','customer_addresses','supplier_addresses']) {
+                    const auxRows=rowsForImportKind(wb,auxKind);
+                    if(auxRows.length) result.push(importXlsxRows(auxRows,auxKind));
+                }
 
                 const salesRows=rowsForImportKind(wb,'sales');
                 if(salesRows.length){
@@ -2518,6 +2650,7 @@
                 // quando a página é recarregada.
                 if (window.PDVCloud?.ready && typeof window.PDVCloud.syncData === 'function') {
                     await window.PDVCloud.syncData();
+                    if (typeof window.PDVCloud.syncAuxiliaryData === 'function') await window.PDVCloud.syncAuxiliaryData();
                 } else {
                     throw new Error('Supabase não está conectado. Os dados foram carregados localmente, mas não foram gravados no banco. Faça login e tente importar novamente.');
                 }
@@ -2535,13 +2668,18 @@
                 if(kind==='customers') importMessage=importXlsxRows(finalRows,'customers');
                 else if(kind==='products') importMessage=importXlsxRows(finalRows,'products');
                 else if(kind==='users') importMessage=importXlsxRows(finalRows,'users');
-                else throw new Error('Importação individual disponível para Clientes, Produtos e Operadores.');
+                else if(kind==='suppliers') importMessage=importXlsxRows(finalRows,'suppliers');
+                else if(kind==='customer_contacts') importMessage=importXlsxRows(finalRows,'customer_contacts');
+                else if(kind==='customer_addresses') importMessage=importXlsxRows(finalRows,'customer_addresses');
+                else if(kind==='supplier_addresses') importMessage=importXlsxRows(finalRows,'supplier_addresses');
+                else throw new Error('Importação individual não reconhecida.');
 
                 // Persiste no Supabase imediatamente. Antes disso os dados ficavam
                 // apenas no localStorage e eram perdidos/sobrescritos após F5.
-                if (kind==='customers' || kind==='products') {
-                    if (window.PDVCloud?.ready && typeof window.PDVCloud.syncData === 'function') {
-                        await window.PDVCloud.syncData();
+                if (['customers','products','suppliers','customer_contacts','customer_addresses','supplier_addresses'].includes(kind)) {
+                    if (window.PDVCloud?.ready && typeof window.PDVCloud.syncAuxiliaryData === 'function') {
+                        if (kind==='customers' || kind==='products') await window.PDVCloud.syncData();
+                        await window.PDVCloud.syncAuxiliaryData();
                         setImportExportStatus(importMessage+' Banco de dados sincronizado com sucesso.');
                     } else {
                         throw new Error('Supabase não está conectado. Os dados foram carregados localmente, mas não foram gravados no banco. Faça login e tente importar novamente.');
