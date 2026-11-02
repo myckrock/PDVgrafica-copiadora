@@ -370,6 +370,60 @@
     return true;
   }
 
+
+  async function loadSalesClosings() {
+    const cloud = await requireClient();
+    const r = await cloud.from('sales_closings').select('*').order('created_at', { ascending: false }).limit(300);
+    if (r.error) throw r.error;
+    return r.data || [];
+  }
+
+  async function getSalesClosingDetails(id) {
+    const cloud = await requireClient();
+    const cr = await cloud.from('sales_closings').select('*').eq('id', id).single();
+    if (cr.error) throw cr.error;
+    const links = await cloud.from('sales_closing_items').select('sale_id,amount').eq('closing_id', id).order('sale_id');
+    if (links.error) throw links.error;
+    const ids = (links.data || []).map(x => x.sale_id);
+    let sales = [];
+    if (ids.length) {
+      const sr = await cloud.from('sales').select('*').in('id', ids).order('sale_date', { ascending: true });
+      if (sr.error) throw sr.error;
+      const ir = await cloud.from('sale_items').select('*').in('sale_id', ids);
+      if (ir.error) throw ir.error;
+      const bySale = new Map();
+      (ir.data || []).forEach(item => {
+        const key=String(item.sale_id);
+        if(!bySale.has(key)) bySale.set(key,[]);
+        bySale.get(key).push({id:item.product_id || item.id,name:item.product_name || 'Item',qty:Number(item.quantity ?? item.qty) || 1,unitPrice:Number(item.unit_price)||0,totalPrice:Number(item.total)||0});
+      });
+      sales = (sr.data || []).map(s => ({
+        id:s.id, date:s.sale_date, customer:s.customer || 'Consumidor Final', customerType:s.customer_type,
+        payMethod:s.pay_method, total:Number(s.total)||0, observation:s.observation||'', items:bySale.get(String(s.id))||[]
+      }));
+    }
+    return { closing: cr.data, sales };
+  }
+
+  async function createSalesClosing(payload) {
+    const cloud = await requireClient();
+    const { data: { user }, error: userError } = await cloud.auth.getUser();
+    if (userError) throw userError;
+    if (!user) throw new Error('Sessão Supabase expirada. Entre novamente no sistema.');
+    const r = await cloud.rpc('create_sales_closing', {
+      p_closing_type: payload.closingType,
+      p_period_type: payload.periodType,
+      p_period_start: payload.periodStart,
+      p_period_end: payload.periodEnd,
+      p_pay_method: payload.payMethod || null,
+      p_customer_id: payload.customerId || null
+    });
+    if (r.error) throw r.error;
+    const id = r.data?.id || r.data?.closing_id || r.data;
+    if (!id) throw new Error('O banco não retornou o identificador do fechamento.');
+    return getSalesClosingDetails(id);
+  }
+
   async function updateOwnAdminAccount({fullname, username, email, password}) {
     const cloud = await requireClient();
     const {data:{user},error:userError}=await cloud.auth.getUser();
@@ -403,7 +457,7 @@
 
   window.PDVCloud = {
     init, showStatus, loadData, loadCalcPrices, saveCalcPrices, saveProduct, saveCustomer,
-    addCustomerCredit, finalizeSale, syncData, syncAuxiliaryData, updateOwnAdminAccount,
+    addCustomerCredit, finalizeSale, syncData, syncAuxiliaryData, loadSalesClosings, getSalesClosingDetails, createSalesClosing, updateOwnAdminAccount,
     setStatus,
     get client(){return client;},
     get ready(){return cloudReady;}
