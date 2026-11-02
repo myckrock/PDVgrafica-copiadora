@@ -13,7 +13,7 @@
         <link rel="manifest" href="manifest.webmanifest">
         <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
         <link rel="apple-touch-icon" href="icon-192.png">
-        <meta name="pdv-app-version" content="1.4.0">
+        <meta name="pdv-app-version" content="1.5.0">
 
         <!-- Tailwind CSS -->
         <script src="https://cdn.tailwindcss.com"></script>
@@ -80,6 +80,10 @@
                     line-height: 1.3 !important;
                 }
                 #receipt-print-area * { color: #000 !important; }
+                #modal-closing-receipt:not(.hidden) { display: block !important; position: static !important; inset: auto !important; padding: 0 !important; margin: 0 !important; background: transparent !important; backdrop-filter: none !important; }
+                #modal-closing-receipt:not(.hidden) > div { display: block !important; width: 80mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+                #closing-print-area { display: block !important; position: static !important; width: 80mm !important; max-width: 80mm !important; box-sizing: border-box !important; padding: 4mm !important; margin: 0 !important; overflow: visible !important; background: #fff !important; color: #000 !important; font-family: monospace !important; font-size: 11px !important; line-height: 1.3 !important; }
+                #closing-print-area, #closing-print-area * { visibility: visible !important; color: #000 !important; }
                 .no-print { display: none !important; }
             }
             
@@ -664,6 +668,9 @@
                     <button onclick="switchAdminSubTab('data-manage')" id="admin-subtab-data-manage" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
                         <i class="fa-solid fa-file-import text-xs"></i> Importar / Exportar
                     </button>
+                    <button onclick="switchAdminSubTab('cash-closing')" id="admin-subtab-cash-closing" class="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2">
+                        <i class="fa-solid fa-cash-register text-xs"></i> Fechamento de Caixa
+                    </button>
                 </div>
                 <!-- PAINEL DE GESTÃO DE USUÁRIOS (VISÍVEL APENAS NA ÁREA ADMIN) -->
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mt-6">
@@ -974,6 +981,62 @@
                         <div id="pdv-import-export-status" class="hidden rounded-xl px-3 py-2 text-xs font-semibold"></div>
                     </div>
                 </div>
+
+                <!-- SUBTAB: CASH CLOSINGS -->
+                <div id="admin-subview-cash-closing" class="space-y-6 hidden">
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-4">
+                            <div>
+                                <h2 class="text-base font-extrabold text-slate-900 flex items-center gap-2"><i class="fa-solid fa-cash-register text-indigo-600"></i> Fechamento de Caixa</h2>
+                                <p class="text-xs text-slate-500 mt-1">Feche cada forma de pagamento separadamente ou gere extratos individuais de mensalistas e clientes com crédito antecipado.</p>
+                            </div>
+                            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">Vendas fechadas não entram novamente</span>
+                        </div>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div class="space-y-3">
+                                <div><label for="closing-mode" class="block text-xs font-bold text-slate-600 mb-1">Tipo de fechamento</label>
+                                    <select id="closing-mode" onchange="updateCashClosingMode()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white">
+                                        <option value="PAYMENT_METHOD">Caixa — forma de pagamento</option>
+                                        <option value="MENSALISTA">Mensalista — por cliente</option>
+                                        <option value="CREDITO_ANTECIPADO">Crédito antecipado — por cliente</option>
+                                    </select>
+                                </div>
+                                <div id="closing-payment-box"><label for="closing-pay-method" class="block text-xs font-bold text-slate-600 mb-1">Forma de pagamento</label>
+                                    <select id="closing-pay-method" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white">
+                                        <option value="DINHEIRO">Dinheiro</option><option value="CARTAO_DEBITO">Cartão de débito</option><option value="CARTAO_CREDITO">Cartão de crédito</option><option value="PIX">PIX</option>
+                                    </select>
+                                </div>
+                                <div id="closing-customer-box" class="hidden"><label for="closing-customer" class="block text-xs font-bold text-slate-600 mb-1">Cliente</label>
+                                    <select id="closing-customer" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"><option value="">Selecione o cliente...</option></select>
+                                </div>
+                            </div>
+                            <div class="space-y-3">
+                                <div><label for="closing-period" class="block text-xs font-bold text-slate-600 mb-1">Período</label>
+                                    <select id="closing-period" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white"><option value="DAY">Diário</option><option value="WEEK">Semanal (segunda a domingo)</option><option value="MONTH">Mensal (mês calendário)</option></select>
+                                </div>
+                                <div><label for="closing-reference-date" class="block text-xs font-bold text-slate-600 mb-1">Data de referência</label>
+                                    <input id="closing-reference-date" type="date" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm bg-white">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <p id="closing-period-preview" class="text-xs text-slate-500">Período selecionado: —</p>
+                            <button id="closing-create-btn" type="button" onclick="createCashClosingFromAdmin()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold shadow"><i class="fa-solid fa-file-invoice-dollar mr-1"></i> Gerar fechamento e comanda</button>
+                        </div>
+                        <p class="mt-3 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">Cada venda só pode pertencer a um fechamento. Depois de fechada, ela é bloqueada para os próximos fechamentos, mesmo que outro período selecionado se sobreponha.</p>
+                    </div>
+
+                    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div><h3 class="text-sm font-extrabold text-slate-800">Histórico de fechamentos</h3><p class="text-[11px] text-slate-500">Consulte e reimprima qualquer comanda de fechamento.</p></div>
+                            <button type="button" onclick="loadCashClosingHistory()" class="px-3 py-2 rounded-lg border border-slate-300 bg-white text-xs font-bold text-slate-700 hover:bg-slate-100"><i class="fa-solid fa-rotate mr-1"></i> Atualizar histórico</button>
+                        </div>
+                        <div class="overflow-x-auto"><table class="w-full text-left text-xs text-slate-600">
+                            <thead class="bg-slate-100 text-slate-700 uppercase text-[10px]"><tr><th class="p-3">Fechamento / Data</th><th class="p-3">Tipo</th><th class="p-3">Período</th><th class="p-3">Forma / Cliente</th><th class="p-3">Vendas</th><th class="p-3">Total</th><th class="p-3 text-right">Comanda</th></tr></thead>
+                            <tbody id="cash-closing-history-body"><tr><td colspan="7" class="p-4 text-center text-slate-400">Carregando histórico...</td></tr></tbody>
+                        </table></div>
+                    </div>
+                </div>
             </section>
         </main>
 
@@ -1187,9 +1250,18 @@
         </div>
     </div>
 
+        <!-- MODAL: CASH CLOSING RECEIPT -->
+        <div id="modal-closing-receipt" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4 hidden">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden">
+                <div class="p-3 bg-slate-900 text-white flex justify-between items-center no-print"><span class="text-xs font-bold">Comanda de Fechamento</span><button onclick="closeCashClosingReceipt()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button></div>
+                <div id="closing-print-area" class="p-5 font-mono text-[11px] leading-tight space-y-3 bg-white text-slate-900"></div>
+                <div class="p-3 bg-slate-50 border-t flex gap-2 no-print"><button onclick="closeCashClosingReceipt()" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold">Fechar</button><button onclick="printCashClosingReceipt()" class="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold"><i class="fa-solid fa-print mr-1"></i> Imprimir comanda</button></div>
+            </div>
+        </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="supabase-config.js"></script>
-    <script src="cloud-sync.js?v=comanda-20261102-1"></script>
+    <script src="cloud-sync.js?v=fechamento-20261102-1"></script>
 
     <script>
     /* APPLICATION STATE & SEEDED DATA */
@@ -2696,8 +2768,159 @@
         }
     }
 
+
+    // ================================================================
+    // FECHAMENTO DE CAIXA — ADMINISTRADOR
+    // ================================================================
+    function localDateISO(date) {
+        const y=date.getFullYear(), m=String(date.getMonth()+1).padStart(2,'0'), d=String(date.getDate()).padStart(2,'0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function getCashClosingPeriod() {
+        const reference=document.getElementById('closing-reference-date')?.value;
+        if(!reference) throw new Error('Selecione a data de referência.');
+        const [y,m,d]=reference.split('-').map(Number);
+        const date=new Date(y,m-1,d,12,0,0);
+        const type=document.getElementById('closing-period').value;
+        let start=new Date(date), end=new Date(date);
+        if(type==='WEEK') {
+            const day=(date.getDay()+6)%7;
+            start.setDate(date.getDate()-day);
+            end=new Date(start); end.setDate(start.getDate()+6);
+        } else if(type==='MONTH') {
+            start=new Date(y,m-1,1,12,0,0);
+            end=new Date(y,m,0,12,0,0);
+        }
+        const labels={DAY:'Diário',WEEK:'Semanal',MONTH:'Mensal'};
+        return {periodType:type,start:localDateISO(start),end:localDateISO(end),label:labels[type]};
+    }
+
+    function updateCashClosingPeriodPreview() {
+        const el=document.getElementById('closing-period-preview');
+        if(!el) return;
+        try { const p=getCashClosingPeriod(); el.textContent=`${p.label}: ${new Date(p.start+'T12:00:00').toLocaleDateString('pt-BR')} até ${new Date(p.end+'T12:00:00').toLocaleDateString('pt-BR')}`; }
+        catch(e) { el.textContent='Selecione a data de referência.'; }
+    }
+
+    function renderCashClosingCustomers() {
+        const mode=document.getElementById('closing-mode')?.value;
+        const select=document.getElementById('closing-customer');
+        if(!select) return;
+        const old=select.value;
+        const list=(customers||[]).filter(c=>c.active!==false && c.type===mode).sort((a,b)=>String(a.name).localeCompare(String(b.name),'pt-BR'));
+        select.innerHTML='<option value="">Selecione o cliente...</option>'+list.map(c=>`<option value="${String(c.id).replace(/"/g,'&quot;')}">${String(c.name).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</option>`).join('');
+        if(list.some(c=>String(c.id)===old)) select.value=old;
+    }
+
+    function updateCashClosingMode() {
+        const mode=document.getElementById('closing-mode')?.value||'PAYMENT_METHOD';
+        document.getElementById('closing-payment-box')?.classList.toggle('hidden',mode!=='PAYMENT_METHOD');
+        document.getElementById('closing-customer-box')?.classList.toggle('hidden',mode==='PAYMENT_METHOD');
+        if(mode!=='PAYMENT_METHOD') renderCashClosingCustomers();
+    }
+
+    async function initCashClosingView() {
+        if(!requireAdmin()) return;
+        if(!window.PDVCloud?.ready) {
+            document.getElementById('cash-closing-history-body').innerHTML='<tr><td colspan="7" class="p-4 text-center text-rose-600">Conecte-se ao Supabase para consultar e registrar fechamentos.</td></tr>';
+            return;
+        }
+        const dateInput=document.getElementById('closing-reference-date');
+        if(dateInput && !dateInput.value) dateInput.value=localDateISO(new Date());
+        renderCashClosingCustomers();
+        updateCashClosingMode();
+        updateCashClosingPeriodPreview();
+        await loadCashClosingHistory();
+    }
+
+    function escapeClosingHtml(value) {
+        return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    function closingTypeLabel(row) {
+        if(row.closing_type==='MENSALISTA') return 'Mensalista';
+        if(row.closing_type==='CREDITO_ANTECIPADO') return 'Crédito antecipado';
+        return 'Caixa';
+    }
+    function closingFilterLabel(row) {
+        if(row.closing_type==='MENSALISTA' || row.closing_type==='CREDITO_ANTECIPADO') return row.customer_name||'Cliente não identificado';
+        return ({DINHEIRO:'Dinheiro',CARTAO_DEBITO:'Cartão de débito',CARTAO_CREDITO:'Cartão de crédito',PIX:'PIX'})[row.pay_method]||row.pay_method||'—';
+    }
+    function closingPeriodLabel(row) {
+        const names={DAY:'Diário',WEEK:'Semanal',MONTH:'Mensal'};
+        return `${names[row.period_type]||row.period_type}: ${new Date(row.period_start+'T12:00:00').toLocaleDateString('pt-BR')} a ${new Date(row.period_end+'T12:00:00').toLocaleDateString('pt-BR')}`;
+    }
+
+    async function loadCashClosingHistory() {
+        if(!requireAdmin()) return;
+        const tbody=document.getElementById('cash-closing-history-body');
+        if(!tbody) return;
+        tbody.innerHTML='<tr><td colspan="7" class="p-4 text-center text-slate-400">Carregando...</td></tr>';
+        try {
+            if(!window.PDVCloud?.ready) throw new Error('Supabase não conectado.');
+            const rows=await PDVCloud.loadSalesClosings();
+            if(!rows.length) { tbody.innerHTML='<tr><td colspan="7" class="p-4 text-center text-slate-400">Nenhum fechamento registrado.</td></tr>'; return; }
+            tbody.innerHTML=rows.map(r=>`<tr class="border-t border-slate-100 hover:bg-slate-50"><td class="p-3 font-semibold text-slate-800">${escapeClosingHtml(String(r.id).slice(0,8))}<br><span class="font-normal text-[10px] text-slate-400">${new Date(r.created_at).toLocaleString('pt-BR')}</span></td><td class="p-3">${closingTypeLabel(r)}</td><td class="p-3">${closingPeriodLabel(r)}</td><td class="p-3">${escapeClosingHtml(closingFilterLabel(r))}</td><td class="p-3">${Number(r.sales_count)||0}</td><td class="p-3 font-extrabold text-slate-900">${formatBRL(r.total)}</td><td class="p-3 text-right"><button type="button" onclick="reprintCashClosing('${escapeClosingHtml(r.id)}')" class="px-2.5 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 font-bold"><i class="fa-solid fa-print mr-1"></i> Comanda</button></td></tr>`).join('');
+        } catch(err) {
+            tbody.innerHTML=`<tr><td colspan="7" class="p-4 text-center text-rose-600">${escapeClosingHtml(err.message||'Falha ao carregar histórico.')}</td></tr>`;
+        }
+    }
+
+    async function createCashClosingFromAdmin() {
+        if(!requireAdmin()) return;
+        const btn=document.getElementById('closing-create-btn');
+        if(btn) btn.disabled=true;
+        try {
+            if(!window.PDVCloud?.ready) throw new Error('Conecte-se ao Supabase antes de fechar o caixa.');
+            const mode=document.getElementById('closing-mode').value;
+            const period=getCashClosingPeriod();
+            const payload={closingType:mode,periodType:period.periodType,periodStart:period.start,periodEnd:period.end,payMethod:null,customerId:null};
+            if(mode==='PAYMENT_METHOD') payload.payMethod=document.getElementById('closing-pay-method').value;
+            else {
+                payload.customerId=document.getElementById('closing-customer').value;
+                if(!payload.customerId) throw new Error('Selecione o cliente para gerar o fechamento.');
+            }
+            const details=await PDVCloud.createSalesClosing(payload);
+            showCashClosingReceipt(details);
+            await loadCashClosingHistory();
+            showToast('Fechamento registrado. As vendas foram vinculadas e não serão fechadas novamente.','success');
+        } catch(err) {
+            console.error('Fechamento de caixa:',err);
+            showToast(err.message||'Não foi possível gerar o fechamento.','error');
+        } finally { if(btn) btn.disabled=false; }
+    }
+
+    function showCashClosingReceipt(details) {
+        const c=details.closing;
+        const salesRows=details.sales||[];
+        const items=salesRows.map(s=>`<div class="flex justify-between gap-2 border-b border-dashed border-slate-300 py-1"><span class="min-w-0 break-words">${escapeClosingHtml(new Date(s.date||s.sale_date).toLocaleString('pt-BR'))} • ${escapeClosingHtml(s.customer||'Consumidor Final')}<br><small>${escapeClosingHtml(s.id)}</small></span><b class="whitespace-nowrap">${formatBRL(s.total)}</b></div>`).join('');
+        const methodOrCustomer=escapeClosingHtml(closingFilterLabel(c));
+        document.getElementById('closing-print-area').innerHTML=`<div class="text-center border-b border-dashed border-slate-400 pb-2"><h2 class="font-black text-sm">GRÁFICA & COPIADORA PRO</h2><p class="font-bold mt-1">COMANDA DE FECHAMENTO</p><p class="text-[10px]">${escapeClosingHtml(closingTypeLabel(c))}</p></div><div class="border-b border-dashed border-slate-400 pb-2 space-y-1"><p><b>Nº:</b> ${escapeClosingHtml(c.id)}</p><p><b>GERADO:</b> ${new Date(c.created_at).toLocaleString('pt-BR')}</p><p><b>PERÍODO:</b> ${escapeClosingHtml(closingPeriodLabel(c))}</p><p><b>FECHAMENTO:</b> ${methodOrCustomer}</p><p><b>OPERADOR:</b> ${escapeClosingHtml(c.operator_name||'Administrador')}</p></div><div><b>VENDAS INCLUÍDAS (${salesRows.length})</b>${items||'<p>Nenhuma venda.</p>'}</div><div class="border-t border-dashed border-slate-400 pt-2 space-y-1"><div class="flex justify-between"><b>TOTAL DO FECHAMENTO</b><b>${formatBRL(c.total)}</b></div><p class="text-[9px] text-slate-500">As vendas listadas foram vinculadas a este fechamento e não serão incluídas em outros fechamentos.</p></div><p class="text-center text-[10px] pt-2">Documento de controle interno</p>`;
+        document.getElementById('modal-closing-receipt').classList.remove('hidden');
+    }
+
+    async function reprintCashClosing(id) {
+        if(!requireAdmin()) return;
+        try {
+            const details=await PDVCloud.getSalesClosingDetails(id);
+            showCashClosingReceipt(details);
+        } catch(err) { showToast(err.message||'Não foi possível recuperar a comanda.','error'); }
+    }
+    function closeCashClosingReceipt() { document.getElementById('modal-closing-receipt')?.classList.add('hidden'); }
+    function printCashClosingReceipt() {
+        const area=document.getElementById('closing-print-area');
+        if(!area || !area.innerText.trim()) { showToast('Comanda de fechamento vazia.','error'); return; }
+        window.print();
+    }
+
+    document.addEventListener('change', event => {
+        if (event.target?.id === 'closing-period' || event.target?.id === 'closing-reference-date') updateCashClosingPeriodPreview();
+        if (event.target?.id === 'closing-mode') updateCashClosingMode();
+    });
+
     function switchAdminSubTab(subtab) {
-        ['operator-sales', 'dashboard', 'catalog-manage', 'users-manage', 'customers-manage', 'my-account', 'data-manage'].forEach(st => {
+        ['operator-sales', 'dashboard', 'catalog-manage', 'users-manage', 'customers-manage', 'my-account', 'data-manage', 'cash-closing'].forEach(st => {
             document.getElementById(`admin-subview-${st}`).classList.add('hidden');
             document.getElementById(`admin-subtab-${st}`).className = 'px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2';
         });
@@ -2721,6 +2944,9 @@
             loadOwnAdminAccountForm();
         } else if (subtab === 'data-manage') {
             if (!requireAdmin()) { switchAdminSubTab('operator-sales'); return; }
+        } else if (subtab === 'cash-closing') {
+            if (!requireAdmin()) { switchAdminSubTab('operator-sales'); return; }
+            initCashClosingView();
         }
     }
 
