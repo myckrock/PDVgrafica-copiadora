@@ -58,9 +58,9 @@
     const items = dbItems.map(i => ({
       id: i.product_id || i.id,
       name: i.product_name || i.name || 'Item',
-      qty: Number(i.qty) || 1,
+      qty: Number(i.quantity ?? i.qty) || 1,
       unitPrice: Number(i.unit_price ?? i.unitPrice ?? 0) || 0,
-      totalPrice: Number(i.total_price ?? i.totalPrice ?? ((Number(i.qty)||1) * Number(i.unit_price||0))) || 0
+      totalPrice: Number(i.total ?? i.total_price ?? i.totalPrice ?? ((Number(i.quantity ?? i.qty)||1) * Number(i.unit_price||0))) || 0
     }));
     return {
       id: s.id,
@@ -279,15 +279,22 @@
 
   async function finalizeSale(order) {
     const cloud = await requireClient();
+
+    // O ID do usuário autenticado é usado no vínculo da venda e nas políticas RLS.
+    const { data: { user }, error: userError } = await cloud.auth.getUser();
+    if (userError) throw userError;
+    if (!user) throw new Error('Sessão Supabase expirada. Entre novamente no sistema.');
+
     const saleRow = {
       id: order.id,
       sale_date: order.date || new Date().toISOString(),
+      operator_id: user.id,
       operator_username: order.operatorUsername || null,
       operator_name: order.operatorName || null,
       customer: order.customer || 'Consumidor Final',
       customer_id: order.customerId || null,
       customer_type: order.customerType || 'CONSUMIDOR',
-      observation: order.observation || null,
+      observation: (order.observation || '').trim() || null,
       subtotal: Number(order.subtotal) || 0,
       discount: Number(order.discount) || 0,
       total: Number(order.total) || 0,
@@ -296,13 +303,14 @@
     const sale = await cloud.from('sales').insert(saleRow).select().single();
     if (sale.error) throw sale.error;
 
+    // Nomes de colunas conforme supabase_schema.sql: quantity, unit_price e total.
     const items = (order.items || []).map(i => ({
       sale_id: order.id,
       product_id: i.id || null,
       product_name: i.name || 'Item',
-      qty: Number(i.qty) || 1,
-      unit_price: Number(i.unitPrice) || 0,
-      total_price: Number(i.totalPrice) || 0
+      quantity: Number(i.qty ?? i.quantity) || 1,
+      unit_price: Number(i.unitPrice ?? i.price) || 0,
+      total: Number(i.totalPrice ?? i.total) || 0
     }));
     if (items.length) {
       const r = await cloud.from('sale_items').insert(items);
